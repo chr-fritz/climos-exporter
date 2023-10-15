@@ -1,0 +1,8 @@
+dist/
+.idea/
+.iml
+completions/
+bin/
+reports/
+.sonarcloud.properties
+tests/

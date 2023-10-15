@@ -1,0 +1,20 @@
+[Unit]
+Description=Climos Prometheus exporter
+After=network.target
+ConditionPathExists=!/etc/climos-exporter/climos-exporter_not_to_be_run
+[Service]
+EnvironmentFile=-/etc/default/climos-exporter
+User=root
+Type=simple
+Restart=on-failure
+RestartSec=10
+ExecStart=/usr/bin/climos-exporter run --log_level $LOG_LEVEL --log_format $LOG_FORMAT -p $PORT
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target
+Alias=climos-exporter.service
+
+[Install]
+WantedBy=multi-user.target
+Alias=climos-exporter.service
