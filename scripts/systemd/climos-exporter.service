@@ -8,7 +8,7 @@ User=root
 Type=simple
 Restart=on-failure
 RestartSec=10
-ExecStart=/usr/bin/climos-exporter run --log_level $LOG_LEVEL --log_format $LOG_FORMAT -p $PORT
+ExecStart=/usr/bin/climos-exporter run --log_level $LOG_LEVEL --log_format $LOG_FORMAT -p $PORT -d $DEVICE
 KillMode=process
 
 [Install]
