@@ -1,0 +1,48 @@
+/*
+ * Copyright © 2023 Christian Fritz <mail@chr-fritz.de>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package climos
+
+import "testing"
+
+func TestValidateCrc(t *testing.T) {
+	type args struct {
+		data []byte
+	}
+	tests := []struct {
+		name string
+		data []byte
+		want bool
+	}{
+		{"to short", []byte{0, 0, 0}, false},
+		{"to long 1", []byte{0x01, 0x00, 0x83, 0x00, 0x7f, 0x38, 0x0}, false},
+		{"to long 2", []byte{0x01, 0x00, 0x83, 0x00, 0x7f, 0x38, 0x1}, false},
+		{"valid1", []byte{0x00, 0x00, 0x00, 0x0e, 0x7b, 0x01, 0x01, 0x00, 0x05, 0x17, 0x06, 0x12, 0x02, 0x00, 0x37, 0x25, 0x13, 0x04, 0x00, 0x00}, true},
+		{"valid2", []byte{0x01, 0x05, 0x80, 0x05, 0x65, 0x4b, 0x00, 0x00, 0x00, 0x00, 0x00}, true},
+		{"valid3", []byte{0x01, 0x01, 0x81, 0x12, 0x3e, 0x37, 0x00, 0x00, 0x01, 0x07, 0x01, 0x8f, 0x00, 0x45, 0x54, 0x41, 0x30, 0x30, 0x33, 0x36, 0x45, 0x32, 0x39, 0x41}, true},
+		{"valid4", []byte{0x01, 0x00, 0x83, 0x00, 0x7f, 0x38}, true},
+		{"valid5", []byte{0x01, 0x04, 0x84, 0x00, 0x28, 0x7d}, true},
+		{"valid6", []byte{0x01, 0x04, 0x86, 0x00, 0x4a, 0x1b}, true},
+		{"invalid", []byte{0x01, 0x02, 0x80, 0x05, 0x7c, 0x8c, 0, 0, 0, 0, 0}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ValidateCrc(tt.data); got != tt.want {
+				t.Errorf("ValidateCrc() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
