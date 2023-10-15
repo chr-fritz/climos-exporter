@@ -1,0 +1,102 @@
+/*
+ * Copyright © 2023 Christian Fritz <mail@chr-fritz.de>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package logging
+
+import (
+	"log/slog"
+	"os"
+	"strings"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+)
+
+type LoggerConfiguration interface {
+	Initialize()
+}
+
+type loggerConfig struct {
+	flagSet       *pflag.FlagSet
+	level         string
+	formatterName string
+	configLogger  *slog.Logger
+}
+
+func InitFlags(flagset *pflag.FlagSet, cmd *cobra.Command) LoggerConfiguration {
+	if flagset == nil {
+		flagset = pflag.CommandLine
+	}
+	config := &loggerConfig{
+		flagSet:      flagset,
+		configLogger: slog.New(slog.NewTextHandler(os.Stderr, nil)),
+	}
+
+	logLevelFlagName := "log_level"
+	logFormatterFlagName := "log_format"
+	flagset.StringVarP(&config.level, logLevelFlagName, "v", "info", "The minimum log level to print the messages.")
+	flagset.StringVarP(&config.formatterName, logFormatterFlagName, "", "text", "The format how to print the log messages.")
+
+	if cmd != nil {
+		if e := cmd.RegisterFlagCompletionFunc(logLevelFlagName, flagCompletion); e != nil {
+			config.configLogger.Error("can not register flag completion for log_level: ", e)
+		}
+
+		e := cmd.RegisterFlagCompletionFunc(logFormatterFlagName, func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+			return []string{"text", "json"}, cobra.ShellCompDirectiveDefault
+		})
+		if e != nil {
+			config.configLogger.Error("can not register flag completion for log formatter: ", e)
+		}
+	}
+
+	return config
+}
+
+func flagCompletion(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+	return []string{"error", "warn", "warning", "info", "debug"}, cobra.ShellCompDirectiveDefault
+}
+
+func (lc *loggerConfig) parseLevel() (slog.Level, error) {
+	var level slog.Level
+
+	if err := level.UnmarshalText([]byte(strings.ToUpper(lc.level))); err != nil {
+		return slog.LevelInfo, err
+	}
+	return level, nil
+}
+func (lc *loggerConfig) Initialize() {
+	handler := lc.createHandler()
+	logger := slog.New(handler)
+	slog.SetDefault(logger)
+}
+
+func (lc *loggerConfig) createHandler() slog.Handler {
+	level, err := lc.parseLevel()
+	if err != nil {
+		lc.configLogger.Error("can not parse log level: ", err)
+	}
+	options := &slog.HandlerOptions{Level: level}
+
+	switch strings.ToLower(lc.formatterName) {
+	case "json":
+		return slog.NewJSONHandler(os.Stdout, options)
+	case "text":
+		fallthrough
+	default:
+		return slog.NewTextHandler(os.Stdout, options)
+	}
+}
