@@ -20,6 +20,7 @@ import (
 	"errors"
 	"go.bug.st/serial"
 	"log/slog"
+	"time"
 )
 
 type Reader interface {
@@ -68,7 +69,7 @@ func (r reader) Run() error {
 func (r reader) read() {
 	var data []byte
 	for {
-		buf := make([]byte, 128)
+		buf := make([]byte, 10*1024)
 		n, err := r.client.Read(buf)
 		if err != nil && !isPortError(err, serial.PortClosed) {
 			slog.Warn("Error reading from serial port: %v", err)
@@ -78,13 +79,16 @@ func (r reader) read() {
 		}
 		data = append(data, buf[:n]...)
 
-		bytes, newStart, err := extractPackage(data)
-		if err != nil && errors.Is(err, ErrorToShort) {
-			continue
-		}
+		for {
+			bytes, newStart, err := extractPackage(data)
+			if err != nil && errors.Is(err, ErrorToShort) {
+				break
+			}
 
-		data = append([]byte{}, data[newStart:]...)
-		r.packagesChan <- newPackage(bytes)
+			data = append([]byte{}, data[newStart:]...)
+			r.packagesChan <- newPackage(bytes)
+		}
+		time.Sleep(1 * time.Second)
 	}
 }
 

@@ -17,98 +17,101 @@
 package climos
 
 import (
-    "bytes"
-    "encoding/binary"
-    "errors"
+	"bytes"
+	"encoding/binary"
+	"errors"
 )
 
 var ErrorToShort = errors.New("data is to short")
 var nullPackage = []byte{0, 0, 0, 0, 0, 0}
 
 type Package struct {
-    TargetAddress Address
-    Command       Command
-    Valid         bool
-    Header        []byte
-    Payload       []byte
-    Data          []byte
+	TargetAddress Address
+	Command       Command
+	Valid         bool
+	Header        []byte
+	Payload       []byte
+	Data          []byte
 }
 
 type Address uint16
 
 func (c Address) String() string {
-    bs := make([]byte, 2)
-    binary.LittleEndian.PutUint16(bs, uint16(c))
+	bs := make([]byte, 2)
+	binary.LittleEndian.PutUint16(bs, uint16(c))
 
-    return asHex(bs)
+	return asHex(bs)
 }
 
 type Command byte
 
 func (c Command) String() string {
-    return asHex([]byte{byte(c)})
+	return asHex([]byte{byte(c)})
 }
 
 const (
-    Status           = Command(0)
-    BroadcastRequest = Command(0x80)
-    BroadcastAnswer  = Command(0x81)
-    Alive            = Command(0x84)
-    GetSet           = Command(0x85)
-    Ask              = Command(0x86)
-    Other            = Command(0x87)
+	Status           = Command(0)
+	BroadcastRequest = Command(0x80)
+	BroadcastAnswer  = Command(0x81)
+	Alive            = Command(0x84)
+	GetSet           = Command(0x85)
+	Ask              = Command(0x86)
+	Other            = Command(0x87)
 )
 
 func newPackage(data []byte) *Package {
-    if len(data) < 6 {
-        return &Package{Valid: false, Data: data}
-    }
-    return &Package{
-        TargetAddress: Address(uint16(data[0])<<8 + uint16(data[1])),
-        Command:       Command(data[2]),
-        Valid:         true,
-        Header:        data[0:4],
-        Payload:       data[6:],
-        Data:          data,
-    }
+	if len(data) < 6 {
+		return &Package{Valid: false, Data: data}
+	}
+	return &Package{
+		TargetAddress: Address(uint16(data[0])<<8 + uint16(data[1])),
+		Command:       Command(data[2]),
+		Valid:         true,
+		Header:        data[0:4],
+		Payload:       data[6:],
+		Data:          data,
+	}
 }
 
 func extractPackage(data []byte) ([]byte, int, error) {
-    dataLength := len(data)
-    if dataLength < 6 {
-        return []byte{}, 0, ErrorToShort
-    }
+	dataLength := len(data)
+	if dataLength < 6 {
+		return []byte{}, 0, ErrorToShort
+	}
 
-    for i := 0; i < dataLength-6; i++ {
-        expectedLength := 6 + expectedDataLength(data[i:])
-        expectedEnd := i + expectedLength
+	for i := 0; i < dataLength-6; i++ {
+		expectedLength := 6 + expectedDataLength(data[i:])
+		expectedEnd := i + expectedLength
 
-        if expectedEnd < i {
-            // invalid length
-            continue
-        }
+		if expectedEnd < i {
+			// invalid length
+			continue
+		}
 
-        if expectedEnd > dataLength {
-            // to short
-            continue
-        }
+		if expectedEnd > dataLength {
+			// to short
+			continue
+		}
 
-        possiblePackage := data[i:expectedEnd]
-        if bytes.Equal(possiblePackage, nullPackage) {
-            // package is valid but contains only null
-            continue
-        }
+		possiblePackage := data[i:expectedEnd]
+		if bytes.Equal(possiblePackage, nullPackage) {
+			// skip next two bytes as we know that on these bytes no package can start
+			i += 2
 
-        if ValidateCrc(possiblePackage) {
-            return possiblePackage, expectedEnd - 1, nil
-        }
-    }
-    return []byte{}, 0, ErrorToShort
+			// package is valid but contains only null
+			continue
+		}
+
+		if ValidateCrc(possiblePackage) {
+			return possiblePackage, expectedEnd - 1, nil
+		}
+	}
+	return []byte{}, 0, ErrorToShort
 }
 
 func expectedDataLength(data []byte) int {
-    if data[3] >= 0x80 {
-        return int(data[3] - 0x80)
-    }
-    return int(data[3])
+	if data[3] >= 0x80 {
+		return int(data[3] - 0x80)
+	}
+	return int(data[3])
 }
