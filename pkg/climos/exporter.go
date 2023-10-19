@@ -17,8 +17,11 @@
 package climos
 
 import (
+	"context"
+	"github.com/chr-fritz/climos-exporter/pkg/logging"
 	"github.com/hashicorp/go-multierror"
 	"github.com/prometheus/client_golang/prometheus"
+	"log/slog"
 )
 
 type MetricsExporter interface {
@@ -49,7 +52,14 @@ func (m *metricsExporter) Run() {
 	for {
 		select {
 		case p := <-m.reader.PackagesChan():
-			parsePackage, err := ParsePackage(*p)
+			slog.With(
+				"command", p.Command,
+				"address", p.TargetAddress,
+				"data", asHex(p.Data),
+			).
+				Log(context.Background(), logging.LevelTrace, "Got valid package")
+
+			parsePackage, err := ParsePackage(p)
 			if err != nil {
 				// do nothing
 				continue

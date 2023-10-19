@@ -46,7 +46,7 @@ type ParsedPackage interface {
 	String() string
 }
 
-func ParsePackage(p Package) (ParsedPackage, error) {
+func ParsePackage(p *Package) (ParsedPackage, error) {
 	if !p.IsValid() {
 		return nil, fmt.Errorf("package is invalid")
 	}
@@ -77,7 +77,7 @@ func ParsePackage(p Package) (ParsedPackage, error) {
 	}
 }
 
-func parseGetSetCommand(p Package) (ParsedPackage, error) {
+func parseGetSetCommand(p *Package) (ParsedPackage, error) {
 	subCmd := SubCommand(p.Payload[0])
 
 	switch subCmd {
@@ -124,7 +124,7 @@ var noTemperatures = &TemperaturePackage{
 	math.NaN(),
 }
 
-func parseTemperatures(p Package) (ParsedPackage, error) {
+func parseTemperatures(p *Package) (ParsedPackage, error) {
 	t := &TemperaturePackage{
 		extractTemperature(p.Data[9:13]),
 		extractTemperature(p.Data[13:17]),
@@ -146,7 +146,7 @@ func extractTemperature(b []byte) float64 {
 	return temp
 }
 
-func parseOtherCommand(p Package) (ParsedPackage, error) {
+func parseOtherCommand(p *Package) (ParsedPackage, error) {
 	slog.With(
 		"command", p.Command,
 		"address", p.TargetAddress,
