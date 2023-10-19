@@ -46,11 +46,11 @@ func Test_loggerConfig_createHandler(t *testing.T) {
 		formatterName string
 		want          slog.Handler
 	}{
-		{"json-debug", "debug", "json", slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug, AddSource: true})},
-		{"text-debug", "debug", "text", slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug, AddSource: true})},
-		{"unknown-debug", "debug", "unknown", slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug, AddSource: true})},
-		{"json-error", "error", "json", slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError, AddSource: true})},
-		{"json-warning", "warning", "json", slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo, AddSource: true})},
+		{"json-debug", "debug", "json", slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})},
+		{"text-debug", "debug", "text", slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})},
+		{"unknown-debug", "debug", "unknown", slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})},
+		{"json-error", "error", "json", slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError})},
+		{"json-warning", "warning", "json", slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

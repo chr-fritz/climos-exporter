@@ -32,6 +32,8 @@ var LevelFlagName = "log_level"
 // json)
 var FormatterFlagName = "log_format"
 
+const LevelTrace = slog.LevelDebug - 1
+
 // LoggerConfiguration encapsulates the configuration of the slog logger through command line arguments or viper
 // configuration options.
 type LoggerConfiguration interface {
@@ -103,8 +105,7 @@ func (lc *loggerConfig) createHandler() slog.Handler {
 		lc.configLogger.Error("can not parse log level: ", err)
 	}
 	options := &slog.HandlerOptions{
-		Level:     level,
-		AddSource: true,
+		Level: level,
 	}
 
 	switch strings.ToLower(lc.formatterName) {
