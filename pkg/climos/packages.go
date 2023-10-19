@@ -22,16 +22,23 @@ import (
 	"errors"
 )
 
+// ErrorToShort is the error that will be returned when the given byte array is too short for a valid pacakge.
 var ErrorToShort = errors.New("data is to short")
 var nullPackage = []byte{0, 0, 0, 0, 0, 0}
 
+// Package is a small structure that represents a message that was delivered from the ventilation system.
 type Package struct {
 	TargetAddress Address
 	Command       Command
-	Valid         bool
+	valid         bool
 	Header        []byte
 	Payload       []byte
 	Data          []byte
+}
+
+// IsValid checks if the package is a valid package.
+func (p Package) IsValid() bool {
+	return p.valid
 }
 
 type Address uint16
@@ -61,32 +68,27 @@ const (
 
 func newPackage(data []byte) *Package {
 	if len(data) < 6 {
-		return &Package{Valid: false, Data: data}
+		return &Package{valid: false, Data: data}
 	}
 	return &Package{
 		TargetAddress: Address(uint16(data[0])<<8 + uint16(data[1])),
 		Command:       Command(data[2]),
-		Valid:         true,
+		valid:         true,
 		Header:        data[0:4],
 		Payload:       data[6:],
 		Data:          data,
 	}
 }
 
-func extractPackage(data []byte) ([]byte, int, error) {
-	dataLength := len(data)
+func extractPackage(data []byte) ([]byte, uint, error) {
+	dataLength := uint(len(data))
 	if dataLength < 6 {
 		return []byte{}, 0, ErrorToShort
 	}
 
-	for i := 0; i < dataLength-6; i++ {
+	for i := uint(0); i < dataLength-6; i++ {
 		expectedLength := 6 + expectedDataLength(data[i:])
 		expectedEnd := i + expectedLength
-
-		if expectedEnd < i {
-			// invalid length
-			continue
-		}
 
 		if expectedEnd > dataLength {
 			// to short
@@ -109,9 +111,9 @@ func extractPackage(data []byte) ([]byte, int, error) {
 	return []byte{}, 0, ErrorToShort
 }
 
-func expectedDataLength(data []byte) int {
+func expectedDataLength(data []byte) uint {
 	if data[3] >= 0x80 {
-		return int(data[3] - 0x80)
+		return uint(data[3] - 0x80)
 	}
-	return int(data[3])
+	return uint(data[3])
 }

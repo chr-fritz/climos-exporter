@@ -47,7 +47,7 @@ type ParsedPackage interface {
 }
 
 func ParsePackage(p Package) (ParsedPackage, error) {
-	if !p.Valid {
+	if !p.IsValid() {
 		return nil, fmt.Errorf("package is invalid")
 	}
 
