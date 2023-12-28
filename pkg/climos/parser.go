@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+
+	"github.com/yerden/go-util/bcd"
 )
 
 type SubCommand int
@@ -112,7 +114,18 @@ func parseGetSetCommand(p *Package) (ParsedPackage, error) {
 
 		return nil, fmt.Errorf("missing impl for filter time")
 	default:
-		logger.Debug("Got unknown command")
+		decoder := bcd.NewDecoder(bcd.Standard)
+		bytes := make([]byte, 2*len(p.Payload))
+		n, _ := decoder.Decode(bytes, p.Payload)
+
+		slog.With(
+			"command", p.Command,
+			"address", p.TargetAddress,
+			"payload", asHex(p.Payload),
+			"data", asHex(p.Data),
+			"payload-as-bcd", string(bytes[:n]),
+		).
+			Debug("Got unknown command")
 		return nil, fmt.Errorf("unknown sub command %x of command 0x85", subCmd)
 	}
 }
@@ -154,12 +167,22 @@ func parseTemperatures(p *Package) (ParsedPackage, error) {
 		extractTemperature(p.Data[17:21]),
 		extractTemperature(p.Data[21:25]),
 	}
-	slog.With(
+
+	logger := slog.With(
 		"outside", t.OutsideTemperature,
 		"indoor_in", t.IndoorInTemperature,
 		"indoor_out", t.IndoorOutTemperature,
 		"house_out", t.HouseOutTemperature,
-	).Info("got temperatures")
+	)
+	if logger.Enabled(nil, slog.LevelDebug) {
+		logger = logger.With(
+			"command", p.Command,
+			"address", p.TargetAddress,
+			"payload", asHex(p.Payload),
+			"data", asHex(p.Data),
+		)
+	}
+	logger.Info("got temperatures")
 	return t, nil
 }
 
@@ -179,6 +202,7 @@ func parseOtherCommand(p *Package) (ParsedPackage, error) {
 		"command", p.Command,
 		"address", p.TargetAddress,
 		"payload", asHex(p.Payload),
+		"data", asHex(p.Data),
 	).
 		Debug("Got known but not implemented command")
 	return nil, fmt.Errorf("unknown command")
