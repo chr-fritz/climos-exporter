@@ -53,7 +53,25 @@ func (c Address) String() string {
 type Command byte
 
 func (c Command) String() string {
-	return asHex([]byte{byte(c)})
+	command := asHex([]byte{byte(c)})
+	switch c {
+	case Status:
+		return "Status(0x" + command + ")"
+	case BroadcastRequest:
+		return "BroadcastRequest(0x" + command + ")"
+	case BroadcastAnswer:
+		return "BroadcastAnswer(0x" + command + ")"
+	case Alive:
+		return "Alive(0x" + command + ")"
+	case GetSet:
+		return "GetSet(0x" + command + ")"
+	case Ask:
+		return "Ask(0x" + command + ")"
+	case Other:
+		return "Other(0x" + command + ")"
+	default:
+		return "Unknown(0x" + command + ")"
+	}
 }
 
 const (

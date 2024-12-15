@@ -29,16 +29,32 @@ func (c SubCommand) String() string {
 	bs := make([]byte, 4)
 	binary.LittleEndian.PutUint32(bs, uint32(c))
 
-	return asHex(bs)
+	command := asHex(bs)
+	switch c {
+	case SetLanguage:
+		return "set language(0x" + command + ")"
+	case SetFanSpeed:
+		return "set fan speed(0x" + command + ")"
+	case TimeLeftToFilterReplacement:
+		return "filter replacement(0x" + command + ")"
+	case Bypass:
+		return "bypass(0x" + command + ")"
+	case OperatingHours:
+		return "operating hours(0x" + command + ")"
+	case Temperatures:
+		return "temperatures(0x" + command + ")"
+	default:
+		return "unknown(0x" + command + ")"
+	}
 }
 
 const (
-	SET_LANGUAGE                    = SubCommand(0x06)
-	SET_FAN_SPEED                   = SubCommand(0x08)
-	TIME_LEFT_TO_FILTER_REPLACEMENT = SubCommand(0x09)
-	BYPASS                          = SubCommand(0x1a)
-	OPERATING_HOURS                 = SubCommand(0x26)
-	TEMPERATURES                    = SubCommand(0x44)
+	SetLanguage                 = SubCommand(0x06)
+	SetFanSpeed                 = SubCommand(0x08)
+	TimeLeftToFilterReplacement = SubCommand(0x09)
+	Bypass                      = SubCommand(0x1a)
+	OperatingHours              = SubCommand(0x26)
+	Temperatures                = SubCommand(0x44)
 )
 
 type ParsedPackage interface {
@@ -79,17 +95,24 @@ func ParsePackage(p *Package) (ParsedPackage, error) {
 
 func parseGetSetCommand(p *Package) (ParsedPackage, error) {
 	subCmd := SubCommand(p.Payload[0])
-
+	logger := slog.With(
+		"command", p.Command,
+		"address", p.TargetAddress,
+		"payload", asHex(p.Payload),
+	)
 	switch subCmd {
-	case TEMPERATURES:
+	case Temperatures:
 		return parseTemperatures(p)
+	case TimeLeftToFilterReplacement:
+		logger.With(
+			"hex-value", asHex(p.Payload[23:27]),
+			"value", binary.BigEndian.Uint32(p.Payload[23:27]),
+		).Info("Got message with reaming time for filters")
+
+		return nil, fmt.Errorf("missing impl for filter time")
 	default:
-		slog.With(
-			"command", p.Command,
-			"address", p.TargetAddress,
-			"payload", asHex(p.Payload),
-		).
-			Debug("Got unknown command")
+
+		logger.Debug("Got unknown command")
 		return nil, fmt.Errorf("unknown sub command %x of command 0x85", subCmd)
 	}
 }
