@@ -63,14 +63,14 @@ func InitFlags(flagset *pflag.FlagSet, cmd *cobra.Command) LoggerConfiguration {
 
 	if cmd != nil {
 		if e := cmd.RegisterFlagCompletionFunc(LevelFlagName, flagCompletion); e != nil {
-			config.configLogger.Error("can not register flag completion for log_level: ", e)
+			config.configLogger.Error("can not register flag completion for log_level", "error", e)
 		}
 
 		e := cmd.RegisterFlagCompletionFunc(FormatterFlagName, func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 			return []string{"text", "json"}, cobra.ShellCompDirectiveDefault
 		})
 		if e != nil {
-			config.configLogger.Error("can not register flag completion for log formatter: ", e)
+			config.configLogger.Error("can not register flag completion for log formatter: ", "error", e)
 		}
 	}
 
@@ -102,7 +102,7 @@ func (lc *loggerConfig) parseLevel() (slog.Level, error) {
 func (lc *loggerConfig) createHandler() slog.Handler {
 	level, err := lc.parseLevel()
 	if err != nil {
-		lc.configLogger.Error("can not parse log level: ", err)
+		lc.configLogger.Error("can not parse log level", "error", err)
 	}
 	options := &slog.HandlerOptions{
 		Level: level,

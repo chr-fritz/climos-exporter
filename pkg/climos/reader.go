@@ -72,7 +72,7 @@ func (r reader) read() {
 		buf := make([]byte, 10*1024)
 		n, err := r.client.Read(buf)
 		if err != nil && !isPortError(err, serial.PortClosed) {
-			slog.Warn("Error reading from serial port: %v", err)
+			slog.Warn("Error reading from serial port", "error", err)
 			continue
 		} else if isPortError(err, serial.PortClosed) {
 			break
