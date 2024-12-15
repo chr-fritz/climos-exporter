@@ -97,6 +97,7 @@ func parseGetSetCommand(p *Package) (ParsedPackage, error) {
 	subCmd := SubCommand(p.Payload[0])
 	logger := slog.With(
 		"command", p.Command,
+		"subCommand", subCmd,
 		"address", p.TargetAddress,
 		"payload", asHex(p.Payload),
 	)
@@ -111,7 +112,6 @@ func parseGetSetCommand(p *Package) (ParsedPackage, error) {
 
 		return nil, fmt.Errorf("missing impl for filter time")
 	default:
-
 		logger.Debug("Got unknown command")
 		return nil, fmt.Errorf("unknown sub command %x of command 0x85", subCmd)
 	}
@@ -154,7 +154,12 @@ func parseTemperatures(p *Package) (ParsedPackage, error) {
 		extractTemperature(p.Data[17:21]),
 		extractTemperature(p.Data[21:25]),
 	}
-	slog.Info(t.String())
+	slog.With(
+		"outside", t.OutsideTemperature,
+		"indoor_in", t.IndoorInTemperature,
+		"indoor_out", t.IndoorOutTemperature,
+		"house_out", t.HouseOutTemperature,
+	).Info("got temperatures")
 	return t, nil
 }
 
