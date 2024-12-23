@@ -18,9 +18,10 @@ package climos
 
 import (
 	"errors"
-	"go.bug.st/serial"
 	"log/slog"
 	"time"
+
+	"go.bug.st/serial"
 )
 
 type Reader interface {

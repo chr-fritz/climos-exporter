@@ -18,10 +18,11 @@ package climos
 
 import (
 	"context"
+	"log/slog"
+
 	"github.com/chr-fritz/climos-exporter/pkg/logging"
 	"github.com/hashicorp/go-multierror"
 	"github.com/prometheus/client_golang/prometheus"
-	"log/slog"
 )
 
 type MetricsExporter interface {

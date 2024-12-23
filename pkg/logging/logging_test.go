@@ -17,13 +17,14 @@
 package logging
 
 import (
-	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
-	"github.com/stretchr/testify/assert"
 	"log/slog"
 	"os"
 	"reflect"
 	"testing"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	"github.com/stretchr/testify/assert"
 )
 
 func Test_loggerConfig_Initialize(t *testing.T) {
