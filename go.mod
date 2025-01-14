@@ -6,7 +6,7 @@ toolchain go1.23.3
 
 require (
 	github.com/coreos/go-systemd/v22 v22.5.0
-	github.com/golang/glog v1.2.3
+	github.com/golang/glog v1.2.4
 	github.com/golang/mock v1.6.0
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/heptiolabs/healthcheck v0.0.0-20211123025425-613501dd5deb
