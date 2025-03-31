@@ -1,9 +1,6 @@
 module github.com/chr-fritz/climos-exporter
 
 go 1.22.0
-
-toolchain go1.23.3
-
 require (
 	github.com/coreos/go-systemd/v22 v22.5.0
 	github.com/golang/glog v1.2.4
@@ -16,7 +13,7 @@ require (
 	github.com/spf13/pflag v1.0.6
 	github.com/spf13/viper v1.20.0
 	github.com/stretchr/testify v1.10.0
-	go.bug.st/serial v1.6.3
+	go.bug.st/serial v1.6.4
 )
 
 require (
