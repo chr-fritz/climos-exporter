@@ -13,7 +13,7 @@ require (
 	github.com/spf13/pflag v1.0.6
 	github.com/spf13/viper v1.20.1
 	github.com/stretchr/testify v1.10.0
-	go.bug.st/serial v1.6.3
+	go.bug.st/serial v1.6.4
 )
 
 require (
