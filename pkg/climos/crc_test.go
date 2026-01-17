@@ -19,9 +19,6 @@ package climos
 import "testing"
 
 func TestValidateCrc(t *testing.T) {
-	type args struct {
-		data []byte
-	}
 	tests := []struct {
 		name string
 		data []byte

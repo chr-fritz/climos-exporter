@@ -17,6 +17,7 @@
 package climos
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"log/slog"
@@ -174,7 +175,7 @@ func parseTemperatures(p *Package) (ParsedPackage, error) {
 		"indoor_out", t.IndoorOutTemperature,
 		"house_out", t.HouseOutTemperature,
 	)
-	if logger.Enabled(nil, slog.LevelDebug) {
+	if logger.Enabled(context.Background(), slog.LevelDebug) {
 		logger = logger.With(
 			"command", p.Command,
 			"address", p.TargetAddress,
