@@ -19,6 +19,8 @@ package climos
 import (
 	"errors"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"time"
 
 	"go.bug.st/serial"
@@ -34,12 +36,17 @@ type reader struct {
 	dev          string
 	client       serial.Port
 	packagesChan chan *Package
+	// Optional raw bytestream logging
+	streamLogDir string
+	streamLog    *os.File
+	streamLogDay string
 }
 
-func NewReader(dev string) Reader {
+func NewReader(dev string, streamLogDir string) Reader {
 	return &reader{
 		dev:          dev,
 		packagesChan: make(chan *Package),
+		streamLogDir: streamLogDir,
 	}
 }
 
@@ -78,6 +85,11 @@ func (r reader) read() {
 		} else if isPortError(err, serial.PortClosed) {
 			break
 		}
+
+		// Write raw bytestream to daily log file when enabled
+		if n > 0 {
+			r.writeRaw(buf[:n])
+		}
 		data = append(data, buf[:n]...)
 
 		for {
@@ -86,7 +98,10 @@ func (r reader) read() {
 				break
 			}
 
-			data = append([]byte{}, data[newStart:]...)
+			// Advance past the extracted package. `extractPackage` returns the index of
+			// the last byte of the package (end-1). Move to `newStart+1` to avoid
+			// re-including the trailing byte, which can cause desynchronization.
+			data = append([]byte{}, data[newStart+1:]...)
 			r.packagesChan <- newPackage(bytes)
 		}
 		time.Sleep(1 * time.Second)
@@ -98,8 +113,44 @@ func (r reader) Close() {
 		slog.With("error", err).
 			Warn("Can not close serial port")
 	}
+	if r.streamLog != nil {
+		_ = r.streamLog.Close()
+	}
 }
 
 func isPortError(err error, code serial.PortErrorCode) bool {
 	return errors.Is(err, serial.PortError{}) && err.(serial.PortError).Code() == code
+}
+
+// writeRaw writes bytes to a file named by the current date in `streamLogDir`.
+// If `streamLogDir` is empty, this is a no-op. The file rotates daily and only
+// contains data for the current day.
+func (r *reader) writeRaw(bs []byte) {
+	if r.streamLogDir == "" || len(bs) == 0 {
+		return
+	}
+	// Determine today's file
+	today := time.Now().Format("2006-01-02")
+	if r.streamLogDay != today || r.streamLog == nil {
+		// Rotate file
+		if r.streamLog != nil {
+			_ = r.streamLog.Close()
+		}
+		// Ensure directory exists
+		if err := os.MkdirAll(r.streamLogDir, 0o755); err != nil {
+			slog.Warn("Cannot create stream log directory", "dir", r.streamLogDir, "error", err)
+			return
+		}
+		path := filepath.Join(r.streamLogDir, today+".bin")
+		f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+		if err != nil {
+			slog.Warn("Cannot open stream log file", "file", path, "error", err)
+			return
+		}
+		r.streamLog = f
+		r.streamLogDay = today
+	}
+	if _, err := r.streamLog.Write(bs); err != nil {
+		slog.Warn("Cannot write stream log", "error", err)
+	}
 }

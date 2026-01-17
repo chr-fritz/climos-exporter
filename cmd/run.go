@@ -26,6 +26,7 @@ import (
 
 const RunPortParm = "exporter.port"
 const RunDeviceParm = "exporter.device"
+const RunStreamDirParm = "exporter.stream.dir"
 
 type RunOptions struct {
 }
@@ -54,6 +55,12 @@ func NewRunCommand() *cobra.Command {
 	cmd.Flags().StringP("device", "d", "/dev/ttyUSB0", "The tty device where the climos ventilation system is connected")
 	_ = viper.BindPFlag(RunDeviceParm, cmd.Flags().Lookup("device"))
 	_ = cmd.RegisterFlagCompletionFunc("device", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		return nil, cobra.ShellCompDirectiveFilterFileExt
+	})
+
+	cmd.Flags().String("stream-dir", "", "Directory to write raw bytestream logs (optional; empty disables logging)")
+	_ = viper.BindPFlag(RunStreamDirParm, cmd.Flags().Lookup("stream-dir"))
+	_ = cmd.RegisterFlagCompletionFunc("stream-dir", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		return nil, cobra.ShellCompDirectiveFilterFileExt
 	})
 
@@ -93,7 +100,7 @@ func (i *RunOptions) initAndRunMetricsExporter(exporter metrics.Exporter, reader
 	return metricsExporter, nil
 }
 func (i *RunOptions) initAndRunReader(device string) (climos.Reader, error) {
-	reader := climos.NewReader(device)
+	reader := climos.NewReader(device, viper.GetString(RunStreamDirParm))
 
 	if e := reader.Run(); e != nil {
 		return nil, e
