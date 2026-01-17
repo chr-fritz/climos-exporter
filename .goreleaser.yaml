@@ -25,8 +25,6 @@ builds:
       - CGO_ENABLED=0
     goos:
       - linux
-      - darwin
-      - windows
     goarch:
       - amd64
       - arm
@@ -39,158 +37,40 @@ builds:
       - -X 'github.com/chr-fritz/climos-exporter/version.Branch={{.Branch}}'
       - -X 'github.com/chr-fritz/climos-exporter/version.CommitDate={{.CommitTimestamp}}'
       - -s -w -extldflags '-static'
-    ignore:
-      - goos: windows
-        goarch: arm
-dockers:
-  - goos: linux
-    goarch: amd64
-    ids:
-      - climos-exporter
-    use: buildx
-    image_templates:
-      - "ghcr.io/chr-fritz/climos-exporter:latest-x64"
-      - "ghcr.io/chr-fritz/climos-exporter:{{ .Tag }}-x64"
-      - "ghcr.io/chr-fritz/climos-exporter:v{{ .Major }}.{{ .Minor }}-x64"
-      - "ghcr.io/chr-fritz/climos-exporter:v{{ .Major }}-x64"
-    skip_push: false
-    dockerfile: Dockerfile
-    build_flag_templates:
-      - "--pull"
-      - "--label=org.opencontainers.image.created={{.CommitDate}}"
-      - "--label=org.opencontainers.image.title={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
-      - "--label=org.opencontainers.image.url=https://github.com/chr-fritz/climos-exporter"
-      - "--label=org.opencontainers.image.licenses=Apache-2.0"
-      - "--platform=linux/amd64"
+
+dockers_v2:
+  - images:
+      - ghcr.io/chr-fritz/climos-exporter
+    tags:
+      - "v{{.Version}}"
+      - "{{ if or .IsSnapshot .IsDraft }}nightly{{ end }}"
+      - "{{ if not (or .IsSnapshot .IsDraft) }}latest{{ end }}"
+      - "{{ if not (or .IsSnapshot .IsDraft) }}v{{ .Major }}.{{ .Minor }}{{ end }}"
+      - "{{ if not (or .IsSnapshot .IsDraft) }}v{{ .Major }}{{ end }}"
+    labels:
+      org.opencontainers.image.created: "{{.CommitDate}}"
+      org.opencontainers.image.title: "{{.ProjectName}}"
+      org.opencontainers.image.revision: "{{.FullCommit}}"
+      org.opencontainers.image.version: "{{.Version}}"
+      org.opencontainers.image.url: "https://github.com/chr-fritz/climos-exporter"
+      org.opencontainers.image.licenses: "Apache-2.0"
+    sbom: "{{ not .IsSnapshot }}"
     extra_files:
-      - scripts/docker/etc_passwd
-  - goos: linux
-    goarch: arm64
-    ids:
-      - climos-exporter
-    use: buildx
-    image_templates:
-      - "ghcr.io/chr-fritz/climos-exporter:latest-arm64"
-      - "ghcr.io/chr-fritz/climos-exporter:{{ .Tag }}-arm64"
-      - "ghcr.io/chr-fritz/climos-exporter:v{{ .Major }}.{{ .Minor }}-arm64"
-      - "ghcr.io/chr-fritz/climos-exporter:v{{ .Major }}-arm64"
-    skip_push: false
-    dockerfile: Dockerfile
-    build_flag_templates:
-      - "--pull"
-      - "--label=org.opencontainers.image.created={{.CommitDate}}"
-      - "--label=org.opencontainers.image.title={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
-      - "--label=org.opencontainers.image.url=https://github.com/chr-fritz/climos-exporter"
-      - "--label=org.opencontainers.image.licenses=Apache-2.0"
-      - "--platform=linux/arm64/v8"
-    extra_files:
-      - scripts/docker/etc_passwd
-  - goos: linux
-    goarch: arm
-    goarm: 7
-    ids:
-      - climos-exporter
-    use: buildx
-    image_templates:
-      - "ghcr.io/chr-fritz/climos-exporter:latest-arm7"
-      - "ghcr.io/chr-fritz/climos-exporter:{{ .Tag }}-arm7"
-      - "ghcr.io/chr-fritz/climos-exporter:v{{ .Major }}.{{ .Minor }}-arm7"
-      - "ghcr.io/chr-fritz/climos-exporter:v{{ .Major }}-arm7"
-    skip_push: false
-    dockerfile: Dockerfile
-    build_flag_templates:
-      - "--pull"
-      - "--label=org.opencontainers.image.created={{.CommitDate}}"
-      - "--label=org.opencontainers.image.title={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
-      - "--label=org.opencontainers.image.url=https://github.com/chr-fritz/climos-exporter"
-      - "--label=org.opencontainers.image.licenses=Apache-2.0"
-      - "--platform=linux/arm/v7"
-    extra_files:
-      - scripts/docker/etc_passwd
-docker_manifests:
-  - name_template: "ghcr.io/chr-fritz/climos-exporter:latest"
-    image_templates:
-      - "ghcr.io/chr-fritz/climos-exporter:latest-x64"
-      - "ghcr.io/chr-fritz/climos-exporter:latest-arm64"
-      - "ghcr.io/chr-fritz/climos-exporter:latest-arm7"
-  - name_template: "ghcr.io/chr-fritz/climos-exporter:{{ .Tag }}"
-    image_templates:
-      - "ghcr.io/chr-fritz/climos-exporter:{{ .Tag }}-x64"
-      - "ghcr.io/chr-fritz/climos-exporter:{{ .Tag }}-arm64"
-      - "ghcr.io/chr-fritz/climos-exporter:{{ .Tag }}-arm7"
-  - name_template: "ghcr.io/chr-fritz/climos-exporter:v{{ .Major }}.{{ .Minor }}"
-    image_templates:
-      - "ghcr.io/chr-fritz/climos-exporter:v{{ .Major }}.{{ .Minor }}-x64"
-      - "ghcr.io/chr-fritz/climos-exporter:v{{ .Major }}.{{ .Minor }}-arm64"
-      - "ghcr.io/chr-fritz/climos-exporter:v{{ .Major }}.{{ .Minor }}-arm7"
-  - name_template: "ghcr.io/chr-fritz/climos-exporter:v{{ .Major }}"
-    image_templates:
-      - "ghcr.io/chr-fritz/climos-exporter:v{{ .Major }}-x64"
-      - "ghcr.io/chr-fritz/climos-exporter:v{{ .Major }}-arm64"
-      - "ghcr.io/chr-fritz/climos-exporter:v{{ .Major }}-arm7"
-brews:
-  - repository:
-      owner: chr-fritz
-      name: homebrew-tap
-    commit_author:
-      name: goreleaserbot
-      email: goreleaser@chr-fritz.de
-    folder: Formula
-    homepage: "https://github.com/chr-fritz/climos-exporter"
-    description: ""
-    license: "Apache-2.0"
-    test: |
-      system "#{bin}/climos-exporter --version"
-    install: |
-      bin.install "climos-exporter"
-      bash_completion.install "completions/climos-exporter.bash" => "climos-exporter"
-      zsh_completion.install "completions/climos-exporter.zsh" => "_climos-exporter"
-      fish_completion.install "completions/climos-exporter.fish"
-nfpms:
-  - package_name: climos-exporter
-    file_name_template: "{{ .ConventionalFileName }}"
-    builds:
-      - climos-exporter
-    vendor: chr-fritz
-    homepage: https://github.com/chr-fritz/climos-exporter
-    maintainer: chr-fritz<chr-fritz@users.noreply.github.com>
-    license: Apache 2.0
-    formats:
-      - deb
-    bindir: /usr/bin
-    contents:
-      # systemd
-      - src: scripts/systemd/climos-exporter.service
-        dst: /usr/lib/systemd/system/climos-exporter.service
-      - src: scripts/systemd/climos-exporter.env
-        dst: /etc/default/climos-exporter
-        type: "config|noreplace"
-      # Completion
-      - src: completions/climos-exporter.bash
-        dst: /usr/share/bash-completion/completions/climos-exporter
-      - src: completions/climos-exporter.fish
-        dst: /usr/share/fish/vendor_completions.d/climos-exporter
-      - src: completions/climos-exporter.zsh
-        dst: /usr/share/zsh/vendor-completions/_climos-exporter
-    scripts:
-      postinstall: "scripts/postinstall.sh"
-      preremove: "scripts/preremove.sh"
+      - etc_passwd
+
+sboms:
+  - artifacts: archive
+
 archives:
   - files:
       - README.md
       - LICENSE
       - completions/*
-      - docs/**
+#      - docs/**
 checksum:
   name_template: 'checksums.txt'
 snapshot:
-  name_template: "{{ .Tag }}-next"
+  version_template: "{{ .Tag }}-next"
 changelog:
   sort: asc
   filters:

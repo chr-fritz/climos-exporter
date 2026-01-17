@@ -10,8 +10,6 @@ updates:
     schedule:
       interval: "daily"
     open-pull-requests-limit: 15
-    registries:
-      - go-persistent-cache
     cooldown:
       default-days: 14
       semver-major-days: 14
