@@ -13,11 +13,10 @@
 # limitations under the License.
 
 FROM scratch
-COPY scripts/docker/etc_passwd /etc/passwd
-COPY climos-exporter /
-COPY pkg/.climos-exporter.yaml /etc/climos-exporter.yaml
+ARG TARGETPLATFORM
+COPY etc_passwd /etc/passwd
+COPY $TARGETPLATFORM/climos-exporter /
 EXPOSE 8080/tcp
-VOLUME /etc/climos-exporter
 USER nonroot
-ENTRYPOINT ["/climos-exporter"]
-CMD ["run", "--config","/etc/climos-exporter.yaml"]
+ENTRYPOINT ["/climos-exporter", "run"]
+CMD []
