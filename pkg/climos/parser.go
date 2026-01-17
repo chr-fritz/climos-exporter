@@ -35,19 +35,19 @@ func (c SubCommand) String() string {
 	command := asHex(bs)
 	switch c {
 	case SetLanguage:
-		return "set language(0x" + command + ")"
+		return "set language(" + command + ")"
 	case SetFanSpeed:
-		return "set fan speed(0x" + command + ")"
+		return "set fan speed(" + command + ")"
 	case TimeLeftToFilterReplacement:
-		return "filter replacement(0x" + command + ")"
+		return "filter replacement(" + command + ")"
 	case Bypass:
-		return "bypass(0x" + command + ")"
+		return "bypass(" + command + ")"
 	case OperatingHours:
-		return "operating hours(0x" + command + ")"
+		return "operating hours(" + command + ")"
 	case Temperatures:
-		return "temperatures(0x" + command + ")"
+		return "temperatures(" + command + ")"
 	default:
-		return "unknown(0x" + command + ")"
+		return "unknown(" + command + ")"
 	}
 }
 
@@ -87,9 +87,10 @@ func ParsePackage(p *Package) (ParsedPackage, error) {
 		return parseOtherCommand(p)
 	default:
 		slog.With(
-			"command", p.Command,
-			"address", p.TargetAddress,
+			"command", p.Command.String(),
+			"address", p.TargetAddress.String(),
 			"payload", asHex(p.Payload),
+			"payload-as-bcd", asBcd(p.Payload),
 		).
 			Debug("Got unknown command")
 		return nil, fmt.Errorf("unknown command %x", p.Command)
@@ -99,10 +100,11 @@ func ParsePackage(p *Package) (ParsedPackage, error) {
 func parseGetSetCommand(p *Package) (ParsedPackage, error) {
 	subCmd := SubCommand(p.Payload[0])
 	logger := slog.With(
-		"command", p.Command,
-		"subCommand", subCmd,
-		"address", p.TargetAddress,
+		"command", p.Command.String(),
+		"subCommand", subCmd.String(),
+		"address", p.TargetAddress.String(),
 		"payload", asHex(p.Payload),
+		"payload-as-bcd", asBcd(p.Payload),
 	)
 	switch subCmd {
 	case Temperatures:
@@ -115,16 +117,12 @@ func parseGetSetCommand(p *Package) (ParsedPackage, error) {
 
 		return nil, fmt.Errorf("missing impl for filter time")
 	default:
-		decoder := bcd.NewDecoder(bcd.Standard)
-		bytes := make([]byte, 2*len(p.Payload))
-		n, _ := decoder.Decode(bytes, p.Payload)
 
 		slog.With(
-			"command", p.Command,
-			"address", p.TargetAddress,
+			"command", p.Command.String(),
+			"address", p.TargetAddress.String(),
 			"payload", asHex(p.Payload),
 			"data", asHex(p.Data),
-			"payload-as-bcd", string(bytes[:n]),
 		).
 			Debug("Got unknown command")
 		return nil, fmt.Errorf("unknown sub command %x of command 0x85", subCmd)
@@ -177,8 +175,8 @@ func parseTemperatures(p *Package) (ParsedPackage, error) {
 	)
 	if logger.Enabled(context.Background(), slog.LevelDebug) {
 		logger = logger.With(
-			"command", p.Command,
-			"address", p.TargetAddress,
+			"command", p.Command.String(),
+			"address", p.TargetAddress.String(),
 			"payload", asHex(p.Payload),
 			"data", asHex(p.Data),
 		)
@@ -200,9 +198,10 @@ func extractTemperature(b []byte) float64 {
 
 func parseOtherCommand(p *Package) (ParsedPackage, error) {
 	slog.With(
-		"command", p.Command,
-		"address", p.TargetAddress,
+		"command", p.Command.String(),
+		"address", p.TargetAddress.String(),
 		"payload", asHex(p.Payload),
+		"payload-as-bcd", asBcd(p.Payload),
 		"data", asHex(p.Data),
 	).
 		Debug("Got known but not implemented command")
@@ -211,5 +210,12 @@ func parseOtherCommand(p *Package) (ParsedPackage, error) {
 
 func asHex(data []byte) string {
 	// Implement asHex function here
-	return fmt.Sprintf("%x", data)
+	return fmt.Sprintf("0x%x", data)
+}
+
+func asBcd(data []byte) string {
+	decoder := bcd.NewDecoder(bcd.Standard)
+	bytes := make([]byte, 2*len(data))
+	n, _ := decoder.Decode(bytes, data)
+	return string(bytes[:n])
 }
