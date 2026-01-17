@@ -56,21 +56,21 @@ func (c Command) String() string {
 	command := asHex([]byte{byte(c)})
 	switch c {
 	case Status:
-		return "Status(0x" + command + ")"
+		return "Status(" + command + ")"
 	case BroadcastRequest:
-		return "BroadcastRequest(0x" + command + ")"
+		return "BroadcastRequest(" + command + ")"
 	case BroadcastAnswer:
-		return "BroadcastAnswer(0x" + command + ")"
+		return "BroadcastAnswer(" + command + ")"
 	case Alive:
-		return "Alive(0x" + command + ")"
+		return "Alive(" + command + ")"
 	case GetSet:
-		return "GetSet(0x" + command + ")"
+		return "GetSet(" + command + ")"
 	case Ask:
-		return "Ask(0x" + command + ")"
+		return "Ask(" + command + ")"
 	case Other:
-		return "Other(0x" + command + ")"
+		return "Other(" + command + ")"
 	default:
-		return "Unknown(0x" + command + ")"
+		return "Unknown(" + command + ")"
 	}
 }
 

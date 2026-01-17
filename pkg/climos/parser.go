@@ -117,14 +117,7 @@ func parseGetSetCommand(p *Package) (ParsedPackage, error) {
 
 		return nil, fmt.Errorf("missing impl for filter time")
 	default:
-
-		slog.With(
-			"command", p.Command.String(),
-			"address", p.TargetAddress.String(),
-			"payload", asHex(p.Payload),
-			"data", asHex(p.Data),
-		).
-			Debug("Got unknown command")
+		logger.Debug("Got unknown sub-command of command get set")
 		return nil, fmt.Errorf("unknown sub command %x of command 0x85", subCmd)
 	}
 }
