@@ -3,7 +3,7 @@ module github.com/chr-fritz/climos-exporter
 go 1.25.6
 
 require (
-	github.com/coreos/go-systemd/v22 v22.6.0
+	github.com/coreos/go-systemd/v22 v22.7.0
 	github.com/golang/glog v1.2.5
 	github.com/golang/mock v1.6.0
 	github.com/hashicorp/go-multierror v1.1.1
