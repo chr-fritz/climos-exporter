@@ -1,18 +1,16 @@
-/*
- * Copyright © 2023 Christian Fritz <mail@chr-fritz.de>
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright © 2020-2025 Christian Fritz <mail@chr-fritz.de>
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package logging
 
@@ -21,56 +19,51 @@ import (
 	"os"
 	"strings"
 
+	"github.com/spf13/viper"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
-// LevelFlagName defines the name of the cli parameter that configures the minimal printed log level.
-var LevelFlagName = "log_level"
-
-// FormatterFlagName defines the name of the cli parameter that configures the logging format (either structured text or
-// json)
-var FormatterFlagName = "log_format"
-
-const LevelTrace = slog.LevelDebug - 1
-
-// LoggerConfiguration encapsulates the configuration of the slog logger through command line arguments or viper
-// configuration options.
 type LoggerConfiguration interface {
-	// Initialize creates a new slog.Logger, configures them and configures them as default logger.
 	Initialize()
 }
 
+const Trace = slog.LevelDebug - 4
+const LevelTrace = Trace
+
 type loggerConfig struct {
+	flagSet       *pflag.FlagSet
 	level         string
 	formatterName string
-	configLogger  *slog.Logger
 }
 
-// InitFlags initializes the appropriate logger command line flags on the given FlagSet and configures the
-// autocompletion for them at the given cobra Command. It returns a LoggerConfiguration which encapsulates the later
-// configuration of the slog logger.
 func InitFlags(flagset *pflag.FlagSet, cmd *cobra.Command) LoggerConfiguration {
 	if flagset == nil {
 		flagset = pflag.CommandLine
 	}
 	config := &loggerConfig{
-		configLogger: slog.New(slog.NewTextHandler(os.Stderr, nil)),
+		flagSet: flagset,
 	}
 
-	flagset.StringVarP(&config.level, LevelFlagName, "v", "info", "The minimum log level to print the messages.")
-	flagset.StringVarP(&config.formatterName, FormatterFlagName, "", "text", "The format how to print the log messages.")
+	logLevelFlagName := "log_level"
+	logFormatterFlagName := "log_format"
+	flagset.StringVarP(&config.level, logLevelFlagName, "v", "info", "The minimum log level to print the messages.")
+	flagset.StringVarP(&config.formatterName, logFormatterFlagName, "", "text", "The format how to print the log messages.")
+
+	_ = viper.BindPFlag("logging.level", flagset.Lookup(logLevelFlagName))
+	_ = viper.BindPFlag("logging.format", flagset.Lookup(logFormatterFlagName))
 
 	if cmd != nil {
-		if e := cmd.RegisterFlagCompletionFunc(LevelFlagName, flagCompletion); e != nil {
-			config.configLogger.Error("can not register flag completion for log_level", "error", e)
+		if e := cmd.RegisterFlagCompletionFunc(logLevelFlagName, flagCompletion); e != nil {
+			slog.Warn("can not register flag completion for log_level", "err", e)
 		}
 
-		e := cmd.RegisterFlagCompletionFunc(FormatterFlagName, func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		e := cmd.RegisterFlagCompletionFunc(logFormatterFlagName, func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 			return []string{"text", "json"}, cobra.ShellCompDirectiveDefault
 		})
 		if e != nil {
-			config.configLogger.Error("can not register flag completion for log formatter: ", "error", e)
+			slog.Warn("can not register flag completion for log formatter", "err", e)
 		}
 	}
 
@@ -78,42 +71,40 @@ func InitFlags(flagset *pflag.FlagSet, cmd *cobra.Command) LoggerConfiguration {
 }
 
 func flagCompletion(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
-	return []string{"error", "warn", "warning", "info", "debug"}, cobra.ShellCompDirectiveDefault
+	return []string{"error", "warn", "info", "debug"}, cobra.ShellCompDirectiveDefault
 }
 
-// Initialize creates a new slog.Logger, configures them and configures them as default logger.
 func (lc *loggerConfig) Initialize() {
-	handler := lc.createHandler()
-	logger := slog.New(handler)
+	level := lc.setLevel()
+
+	opts := &slog.HandlerOptions{
+		AddSource:   true,
+		Level:       level,
+		ReplaceAttr: nil,
+	}
+	logger := slog.New(lc.setFormatter(opts))
 	slog.SetDefault(logger)
 }
 
-// parseLevel parses the configured logging level from a string.
-func (lc *loggerConfig) parseLevel() (slog.Level, error) {
+func (lc *loggerConfig) setLevel() slog.Level {
 	var level slog.Level
+	e := level.UnmarshalText([]byte(lc.level))
 
-	if err := level.UnmarshalText([]byte(strings.ToUpper(lc.level))); err != nil {
-		return slog.LevelInfo, err
+	if e != nil {
+		slog.Warn("Can not parse level", "invalid-level", lc.level)
+		return slog.LevelInfo
 	}
-	return level, nil
+	return level
 }
-
-// createHandler creates the slog.Handler which will be used for the new default slog logger.
-func (lc *loggerConfig) createHandler() slog.Handler {
-	level, err := lc.parseLevel()
-	if err != nil {
-		lc.configLogger.Error("can not parse log level", "error", err)
-	}
-	options := &slog.HandlerOptions{
-		Level: level,
-	}
-
+func (lc *loggerConfig) setFormatter(options *slog.HandlerOptions) slog.Handler {
+	var parent slog.Handler
 	switch strings.ToLower(lc.formatterName) {
 	case "json":
-		return slog.NewJSONHandler(os.Stdout, options)
+		parent = slog.NewJSONHandler(os.Stdout, options)
 	case "text":
 		fallthrough
 	default:
-		return slog.NewTextHandler(os.Stdout, options)
+		parent = slog.NewTextHandler(os.Stdout, options)
 	}
+	return parent
 }
