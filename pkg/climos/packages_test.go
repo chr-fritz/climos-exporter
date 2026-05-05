@@ -89,10 +89,10 @@ func TestAddress_String(t *testing.T) {
 		c    Address
 		want string
 	}{
-		{Address(0), "0000"},
-		{Address(0x8080), "8080"},
-		{Address(0x8081), "8180"},
-		{Address(0xf0f1), "f1f0"},
+		{Address(0), "0x0000"},
+		{Address(0x8080), "0x8080"},
+		{Address(0x8081), "0x8180"},
+		{Address(0xf0f1), "0xf1f0"},
 	}
 	for _, tt := range tests {
 		t.Run(asHex([]byte{byte(tt.c)}), func(t *testing.T) {
