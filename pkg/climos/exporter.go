@@ -26,22 +26,19 @@ import (
 )
 
 type MetricsExporter interface {
-	Run()
-	Close()
+	Run(ctx context.Context)
 }
 
 type metricsExporter struct {
 	lastTemperatures *TemperaturePackage
 	registerer       prometheus.Registerer
 	reader           Reader
-	closed           chan bool
 }
 
 func NewMetricsExporter(registerer prometheus.Registerer, reader Reader) (MetricsExporter, error) {
 	m := &metricsExporter{
 		registerer: registerer,
 		reader:     reader,
-		closed:     make(chan bool),
 	}
 	if err := m.registerTemperatureMetrics(); err != nil {
 		return nil, err
@@ -49,7 +46,7 @@ func NewMetricsExporter(registerer prometheus.Registerer, reader Reader) (Metric
 	return m, nil
 }
 
-func (m *metricsExporter) Run() {
+func (m *metricsExporter) Run(ctx context.Context) {
 	for {
 		select {
 		case p := <-m.reader.PackagesChan():
@@ -57,10 +54,9 @@ func (m *metricsExporter) Run() {
 				"command", p.Command,
 				"address", p.TargetAddress,
 				"data", asHex(p.Data),
-			).
-				Log(context.Background(), logging.LevelTrace, "Got valid package")
+			).Log(ctx, logging.LevelTrace, "Got valid package")
 
-			parsePackage, err := ParsePackage(p)
+			parsePackage, err := ParsePackage(ctx, p)
 			if err != nil {
 				// do nothing
 				continue
@@ -71,14 +67,10 @@ func (m *metricsExporter) Run() {
 				m.lastTemperatures = t
 			}
 
-		case <-m.closed:
+		case <-ctx.Done():
 			return
 		}
 	}
-}
-
-func (m *metricsExporter) Close() {
-	m.closed <- true
 }
 
 func (m *metricsExporter) registerTemperatureMetrics() error {

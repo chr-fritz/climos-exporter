@@ -17,6 +17,7 @@
 package climos
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"os"
@@ -27,9 +28,8 @@ import (
 )
 
 type Reader interface {
-	Run() error
+	Run(ctx context.Context) error
 	PackagesChan() chan *Package
-	Close()
 }
 
 type reader struct {
@@ -50,11 +50,11 @@ func NewReader(dev string, streamLogDir string) Reader {
 	}
 }
 
-func (r reader) PackagesChan() chan *Package {
+func (r *reader) PackagesChan() chan *Package {
 	return r.packagesChan
 }
 
-func (r reader) Run() error {
+func (r *reader) Run(ctx context.Context) error {
 	mode := &serial.Mode{
 		BaudRate:          9600,
 		DataBits:          8,
@@ -69,46 +69,53 @@ func (r reader) Run() error {
 		return err
 	}
 
-	go r.read()
+	go r.read(ctx)
 
 	return nil
 }
 
-func (r reader) read() {
+func (r *reader) read(ctx context.Context) {
 	var data []byte
+loop:
 	for {
-		buf := make([]byte, 10*1024)
-		n, err := r.client.Read(buf)
-		if err != nil && !isPortError(err, serial.PortClosed) {
-			slog.Warn("Error reading from serial port", "error", err)
-			continue
-		} else if isPortError(err, serial.PortClosed) {
-			break
-		}
-
-		// Write raw bytestream to daily log file when enabled
-		if n > 0 {
-			r.writeRaw(buf[:n])
-		}
-		data = append(data, buf[:n]...)
-
-		for {
-			bytes, newStart, err := extractPackage(data)
-			if err != nil && errors.Is(err, ErrorToShort) {
-				break
+		select {
+		case <-ctx.Done():
+			r.close()
+			return
+		default:
+			buf := make([]byte, 10*1024)
+			n, err := r.client.Read(buf)
+			if err != nil && !isPortError(err, serial.PortClosed) {
+				slog.Warn("Error reading from serial port", "error", err)
+				continue
+			} else if isPortError(err, serial.PortClosed) {
+				break loop
 			}
 
-			// Advance past the extracted package. `extractPackage` returns the index of
-			// the last byte of the package (end-1). Move to `newStart+1` to avoid
-			// re-including the trailing byte, which can cause desynchronization.
-			data = append([]byte{}, data[newStart+1:]...)
-			r.packagesChan <- newPackage(bytes)
+			// Write raw bytestream to daily log file when enabled
+			if n > 0 {
+				r.writeRaw(buf[:n])
+			}
+			data = append(data, buf[:n]...)
+
+			for {
+				bytes, newStart, err := extractPackage(data)
+				if err != nil && errors.Is(err, ErrorToShort) {
+					break
+				}
+
+				// Advance past the extracted package. `extractPackage` returns the index of
+				// the last byte of the package (end-1). Move to `newStart+1` to avoid
+				// re-including the trailing byte, which can cause desynchronization.
+				data = append([]byte{}, data[newStart+1:]...)
+				r.packagesChan <- newPackage(bytes)
+			}
+			time.Sleep(1 * time.Second)
 		}
-		time.Sleep(1 * time.Second)
 	}
 }
 
-func (r reader) Close() {
+func (r *reader) close() {
 	if err := r.client.Close(); err != nil {
 		slog.With("error", err).
 			Warn("Can not close serial port")

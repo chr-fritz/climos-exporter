@@ -65,39 +65,38 @@ type ParsedPackage interface {
 	String() string
 }
 
-func ParsePackage(p *Package) (ParsedPackage, error) {
+func ParsePackage(ctx context.Context, p *Package) (ParsedPackage, error) {
 	if !p.IsValid() {
 		return nil, fmt.Errorf("package is invalid")
 	}
 
 	switch p.Command {
 	case Status:
-		return parseOtherCommand(p)
+		return parseOtherCommand(ctx, p)
 	case BroadcastRequest:
-		return parseOtherCommand(p)
+		return parseOtherCommand(ctx, p)
 	case BroadcastAnswer:
-		return parseOtherCommand(p)
+		return parseOtherCommand(ctx, p)
 	case Alive:
-		return parseOtherCommand(p)
+		return parseOtherCommand(ctx, p)
 	case GetSet:
-		return parseGetSetCommand(p)
+		return parseGetSetCommand(ctx, p)
 	case Ask:
-		return parseOtherCommand(p)
+		return parseOtherCommand(ctx, p)
 	case Other:
-		return parseOtherCommand(p)
+		return parseOtherCommand(ctx, p)
 	default:
 		slog.With(
 			"command", p.Command.String(),
 			"address", p.TargetAddress.String(),
 			"payload", asHex(p.Payload),
 			"payload-as-bcd", asBcd(p.Payload),
-		).
-			Debug("Got unknown command")
+		).DebugContext(ctx, "Got unknown command")
 		return nil, fmt.Errorf("unknown command %x", p.Command)
 	}
 }
 
-func parseGetSetCommand(p *Package) (ParsedPackage, error) {
+func parseGetSetCommand(ctx context.Context, p *Package) (ParsedPackage, error) {
 	subCmd := SubCommand(p.Payload[0])
 	logger := slog.With(
 		"command", p.Command.String(),
@@ -108,16 +107,16 @@ func parseGetSetCommand(p *Package) (ParsedPackage, error) {
 	)
 	switch subCmd {
 	case Temperatures:
-		return parseTemperatures(p)
+		return parseTemperatures(ctx, p)
 	case TimeLeftToFilterReplacement:
 		logger.With(
 			"hex-value", asHex(p.Payload[23:27]),
 			"value", binary.BigEndian.Uint32(p.Payload[23:27]),
-		).Info("Got message with reaming time for filters")
+		).InfoContext(ctx, "Got message with reaming time for filters")
 
 		return nil, fmt.Errorf("missing impl for filter time")
 	default:
-		logger.Debug("Got unknown sub-command of command get set")
+		logger.DebugContext(ctx, "Got unknown sub-command of command get set")
 		return nil, fmt.Errorf("unknown sub command %x of command 0x85", subCmd)
 	}
 }
@@ -152,7 +151,7 @@ var noTemperatures = &TemperaturePackage{
 	math.NaN(),
 }
 
-func parseTemperatures(p *Package) (ParsedPackage, error) {
+func parseTemperatures(ctx context.Context, p *Package) (ParsedPackage, error) {
 	t := &TemperaturePackage{
 		extractTemperature(p.Data[9:13]),
 		extractTemperature(p.Data[13:17]),
@@ -174,7 +173,7 @@ func parseTemperatures(p *Package) (ParsedPackage, error) {
 			"data", asHex(p.Data),
 		)
 	}
-	logger.Info("got temperatures")
+	logger.InfoContext(ctx, "got temperatures")
 	return t, nil
 }
 
@@ -189,15 +188,14 @@ func extractTemperature(b []byte) float64 {
 	return temp
 }
 
-func parseOtherCommand(p *Package) (ParsedPackage, error) {
+func parseOtherCommand(ctx context.Context, p *Package) (ParsedPackage, error) {
 	slog.With(
 		"command", p.Command.String(),
 		"address", p.TargetAddress.String(),
 		"payload", asHex(p.Payload),
 		"payload-as-bcd", asBcd(p.Payload),
 		"data", asHex(p.Data),
-	).
-		Debug("Got known but not implemented command")
+	).DebugContext(ctx, "Got known but not implemented command")
 	return nil, fmt.Errorf("unknown command")
 }
 

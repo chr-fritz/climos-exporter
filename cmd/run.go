@@ -17,6 +17,8 @@
 package cmd
 
 import (
+	"context"
+
 	"github.com/chr-fritz/climos-exporter/pkg/climos"
 	"github.com/chr-fritz/climos-exporter/pkg/metrics"
 	"github.com/heptiolabs/healthcheck"
@@ -67,42 +69,40 @@ func NewRunCommand() *cobra.Command {
 	return &cmd
 }
 
-func (i *RunOptions) run(_ *cobra.Command, _ []string) error {
+func (i *RunOptions) run(cmd *cobra.Command, _ []string) error {
+	ctx, cancelFunc := context.WithCancel(cmd.Context())
+	defer cancelFunc()
+
 	prometheusExporter := metrics.NewExporter(uint16(viper.GetUint(RunPortParm)))
 
 	prometheusExporter.AddLivenessCheck("goroutine-threshold", healthcheck.GoroutineCountCheck(100))
-	reader, err := i.initAndRunReader(viper.GetString(RunDeviceParm))
+	reader, err := i.initAndRunReader(ctx, viper.GetString(RunDeviceParm))
 	if err != nil {
 		return err
 	}
 
-	metricsExporter, err := i.initAndRunMetricsExporter(prometheusExporter, reader)
+	_, err = i.initAndRunMetricsExporter(ctx, prometheusExporter, reader)
 	if err != nil {
 		return err
 	}
-
-	defer func() {
-		metricsExporter.Close()
-		reader.Close()
-	}()
 
 	return prometheusExporter.Run()
 }
 
-func (i *RunOptions) initAndRunMetricsExporter(exporter metrics.Exporter, reader climos.Reader) (climos.MetricsExporter, error) {
+func (i *RunOptions) initAndRunMetricsExporter(ctx context.Context, exporter metrics.Exporter, reader climos.Reader) (climos.MetricsExporter, error) {
 	metricsExporter, err := climos.NewMetricsExporter(exporter, reader)
 	if err != nil {
 		return nil, err
 	}
 
-	go metricsExporter.Run()
+	go metricsExporter.Run(ctx)
 
 	return metricsExporter, nil
 }
-func (i *RunOptions) initAndRunReader(device string) (climos.Reader, error) {
+func (i *RunOptions) initAndRunReader(ctx context.Context, device string) (climos.Reader, error) {
 	reader := climos.NewReader(device, viper.GetString(RunStreamDirParm))
 
-	if e := reader.Run(); e != nil {
+	if e := reader.Run(ctx); e != nil {
 		return nil, e
 	}
 
