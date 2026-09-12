@@ -554,7 +554,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "Register 0x81 bis 0x84. Der Wärmebereitstellungsgrad ist daraus gerechnet: (Zuluft − Außenluft) / (Abluft − Außenluft).",
+      "description": "Register 0x81 bis 0x84. Der Wärmebereitstellungsgrad ist daraus gerechnet: (Zuluft − Außenluft) / (Abluft − Außenluft). Er wird nur gezeichnet, solange Abluft und Außenluft mehr als 3 K auseinanderliegen; darunter teilt die Formel durch fast null und der Wert springt.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -791,7 +791,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "(climos_temperatures_indoor_in - climos_temperatures_outside) / (climos_temperatures_indoor_out - climos_temperatures_outside)",
+          "expr": "(climos_temperatures_indoor_in - climos_temperatures_outside) / (climos_temperatures_indoor_out - climos_temperatures_outside) and (climos_temperatures_indoor_out - climos_temperatures_outside) > 3",
           "instant": false,
           "legendFormat": "Wärmebereitstellungsgrad",
           "range": true,
@@ -877,7 +877,7 @@
         ]
       },
       "gridPos": {
-        "h": 9,
+        "h": 5,
         "w": 8,
         "x": 16,
         "y": 6
@@ -917,6 +917,88 @@
       ],
       "title": "Lüfter-Sollwert",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Bit 5 des Statusworts 0x1a. Es ist gesetzt, solange die Sommerlüftung läuft: der Fortluftventilator steht dann still, damit die Abluft ihre Wärme nicht an die Zuluft abgibt. Der Wärmebereitstellungsgrad links fällt dabei gegen null.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "text",
+                  "index": 0,
+                  "text": "inaktiv"
+                },
+                "1": {
+                  "color": "green",
+                  "index": 1,
+                  "text": "aktiv"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 16,
+        "y": 11
+      },
+      "id": 13,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "(climos_status_word % 64) >= bool 32",
+          "instant": false,
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Sommerlüftung",
+      "type": "stat"
     },
     {
       "collapsed": false,
@@ -1067,6 +1149,39 @@
                         "color": "green",
                         "index": 0,
                         "text": "kein Fehler"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Statuswort"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "13": {
+                        "color": "blue",
+                        "index": 0,
+                        "text": "Wärmetauscher"
+                      },
+                      "37": {
+                        "color": "green",
+                        "index": 1,
+                        "text": "Sommerlüftung"
+                      },
+                      "45": {
+                        "color": "yellow",
+                        "index": 2,
+                        "text": "Umschalten"
                       }
                     },
                     "type": "value"
@@ -1908,7 +2023,109 @@
             "properties": [
               {
                 "id": "custom.width",
-                "value": 110
+                "value": 230
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "0x1b": {
+                        "index": 0,
+                        "text": "0x1b  Freigaben"
+                      },
+                      "0x2e": {
+                        "index": 1,
+                        "text": "0x2e  Lüfterstufe 1"
+                      },
+                      "0x2f": {
+                        "index": 2,
+                        "text": "0x2f  Lüfterstufe 2"
+                      },
+                      "0x30": {
+                        "index": 3,
+                        "text": "0x30  Lüfterstufe 3"
+                      },
+                      "0x31": {
+                        "index": 4,
+                        "text": "0x31  Disbalance 1"
+                      },
+                      "0x32": {
+                        "index": 5,
+                        "text": "0x32  Disbalance 2"
+                      },
+                      "0x33": {
+                        "index": 6,
+                        "text": "0x33  Disbalance 3"
+                      },
+                      "0x3b": {
+                        "index": 7,
+                        "text": "0x3b  Stoßlüftungsdauer"
+                      },
+                      "0x3c": {
+                        "index": 8,
+                        "text": "0x3c  Abwesenheit min/h"
+                      },
+                      "0x3d": {
+                        "index": 9,
+                        "text": "0x3d  Filterintervall"
+                      },
+                      "0x3e": {
+                        "index": 10,
+                        "text": "0x3e  Filterrestlaufzeit"
+                      },
+                      "0x41": {
+                        "index": 11,
+                        "text": "0x41  Sommerlüftung t_som"
+                      },
+                      "0x43": {
+                        "index": 12,
+                        "text": "0x43  Sommerlüftung Hysterese"
+                      },
+                      "0x49": {
+                        "index": 13,
+                        "text": "0x49  Sommerlüftung Grenze"
+                      },
+                      "0x4a": {
+                        "index": 14,
+                        "text": "0x4a  Frostschutz eco"
+                      },
+                      "0x4b": {
+                        "index": 15,
+                        "text": "0x4b  Frostschutz sicher"
+                      },
+                      "0x4c": {
+                        "index": 16,
+                        "text": "0x4c  Frostschutz Feuchte-WT"
+                      },
+                      "0x55": {
+                        "index": 17,
+                        "text": "0x55  Lüfter-Sollwert"
+                      },
+                      "0x62": {
+                        "index": 18,
+                        "text": "0x62  Änderungsereignis"
+                      },
+                      "0x81": {
+                        "index": 19,
+                        "text": "0x81  Zuluft"
+                      },
+                      "0x82": {
+                        "index": 20,
+                        "text": "0x82  Außenluft"
+                      },
+                      "0x83": {
+                        "index": 21,
+                        "text": "0x83  Abluft"
+                      },
+                      "0x84": {
+                        "index": 22,
+                        "text": "0x84  Fortluft"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
               }
             ]
           }
