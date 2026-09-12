@@ -4,8 +4,9 @@
 [![Quality gate](https://sonarcloud.io/api/project_badges/measure?project=chr-fritz_climos-exporter&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=chr-fritz_climos-exporter)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-Reads the internal RS-485 bus of a Paul Novus 300 / Zehnder ClimOS heat recovery
-ventilation unit and exposes what it carries as Prometheus metrics.
+Reads the internal RS-485 bus of a Zehnder ClimOS 200 heat recovery ventilation
+unit and exposes what it carries as Prometheus metrics. The same bus is used by
+the Paul Novus 300, which shares the platform.
 
 The unit has no documented interface. The bus protocol was reverse engineered
 from recorded bytestreams and is written down in
@@ -78,14 +79,14 @@ exporter:
 | `climos_fan_setpoint_percent`                | `0x55`         | fan setpoint, mirrors the 0-10V control input      |
 | `climos_operating_mode`                      | `0x28`         | mode selected on the panel                         |
 | `climos_filter_remaining_seconds`            | `0x3e`         | time left until the filter change is due           |
-| `climos_filter_interval_seconds`             | `0x3a`         | configured interval between filter changes         |
-| `climos_operating_seconds{counter=…}`        | `0x26`, `0x85` | operating time, counted while powered              |
+| `climos_filter_interval_seconds`             | `0x3d`         | configured interval between filter changes         |
+| `climos_operating_seconds{counter=…}`        | `0x26`, `0x85` | operating time, total and fan, as the panel counts it |
 | `climos_run_state`                           | `0x1d`         | 1 running, 0 shutting down, 3 shortly after a start |
 | `climos_status_word`                         | `0x1a`         | status word, 13 during normal operation            |
 | `climos_lifecycle_state`                     | `0x08`         | 0 before stopping, 1 then 3 while starting         |
 | `climos_error_code`                          | `0x0e`         | error code, 0 when healthy                         |
-| `climos_register{register=…}`                | all            | raw value of every numeric register                |
-| `climos_device_info{…}`                      | identity       | article numbers and device names                   |
+| `climos_register{register=…}`                | all            | unsigned wire value of every numeric register      |
+| `climos_device_info{…}`                      | identity       | bus version and the attached nodes' article numbers |
 | `climos_bus_restarts_total`                  | —              | restarts, one per address scan                     |
 | `climos_frames_total{result=…}`              | —              | frames read, by framing result                     |
 | `climos_unknown_registers_total{register=…}` | —              | records dropped for want of a known width          |
