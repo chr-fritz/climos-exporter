@@ -101,6 +101,19 @@ whose width is not in the table, and the rest of that frame is lost with it.
 [`docs/protocol.md`](docs/protocol.md#preheater) explains how to work the width
 out from the next restart dump.
 
+## Dashboard
+
+[`dashboards/climos-exporter.json`](dashboards/climos-exporter.json) shows every
+metric on one page: the air temperatures with the heat recovery ratio derived
+from them, the fan setpoint, the state registers as a timeline, both operating
+counters, the filter countdown, and a bus section with the framing results and
+the raw value of every register. Import it and pick the Prometheus data source
+when asked.
+
+The bus section is the one to look at when something is off: a rising repaired
+share means the line is losing bytes, and a rising unknown register count means
+a device reports something this exporter cannot place.
+
 ## Recording and replaying the bus
 
 With `--stream-dir` the reader writes the raw bytestream to one file per day.
