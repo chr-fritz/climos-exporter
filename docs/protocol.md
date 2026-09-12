@@ -90,8 +90,10 @@ address to a device:
 | `0x0108` | `SWZ0025B27A` | fan slave                 |
 | `0x0109` | `ST00064E26E` | defroster                 |
 
-The master itself is `SWZ0024B32B` and never appears on the bus: it announces
-the others but not itself. The remaining addresses are asked twice and stay
+The bus names two of them in full — `0x88` reads `Fan controller` and `0x8b`
+reads `Touch TFT 1`, which is the panel's own wording for `ETA0036E31E` — while
+`0x09` stays empty for the third. The master itself is `SWZ0024B32B` and never
+appears on the bus: it announces the others but not itself. The remaining addresses are asked twice and stay
 silent, which matches the panel's list of attached devices — master, control
 unit, fan slave and defroster are ticked, the heater and the EWT damper are not.
 The address map in the `Adressen` sheet does not apply to this firmware: it
@@ -161,7 +163,7 @@ Value types:
 | `0x28` |     1 | operating mode, only on change   | event  | 4, 6             | measured   |
 | `0x44` |     1 | unidentified, 136 – 141          | 3.5 s  | see below        | open       |
 | `0x25` |     1 | constant 0x36                    | 60 s   | 54               | open       |
-| `0x09` |    16 | empty name slot, the defroster reports no name | 60 s | `00` + 15 spaces | measured |
+| `0x09` |    16 | name slot of the third node, which reports none | 60 s | `00` + 15 spaces | measured |
 
 `0x28` carries the mode codes from the `Lüfterstufen` sheet: 1 – 3 fan stage,
 4 boost, 5 away, 6 automatic. `0x27` and `0x29` run alongside it and read 6 in
@@ -202,8 +204,8 @@ accumulated downtime.
 | `0x0d`         |    11 | `ETA0036E31E`           | article number of TFT 1                    |
 | `0x19`         |    11 | `SWZ0025B27A`           | article number of the fan slave            |
 | `0x1c`         |    11 | `ST00064E26E`           | article number of the defroster            |
-| `0x88`         |    16 | `c2` + `Fan controller` | type byte and device name                  |
-| `0x8b`         |    16 | `c7` + `Touch TFT 1`    | type byte and device name                  |
+| `0x88`         |    16 | `c2` + `Fan controller` | type byte and name of the fan slave        |
+| `0x8b`         |    16 | `c7` + `Touch TFT 1`    | type byte and name of TFT 1                |
 | `0x89`, `0x8c` |     4 | `06 08 0a 17`           | identical on both, likely a firmware stamp |
 | `0x8a`, `0x8d` |     3 | `09 2f 0c`, `24 2e 0c`  | differs per device                         |
 

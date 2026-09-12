@@ -166,20 +166,6 @@ climos_unknown_registers_total{register="0x8f"} 1
 		"the values in front of the unknown register still have to be stored")
 }
 
-func TestMetricsExporterConvertsCountersToSeconds(t *testing.T) {
-	m, _ := newTestExporter(t)
-	// Both are five byte counters: 0x3e counts down to the filter change and
-	// 0x3d holds the interval the panel shows as "voreingestellt".
-	frame := decodeHex(t, "0100850e00003e00 0a0c640000 3d00 0000a00000")
-	frame[4], frame[5] = crcOf(frame)
-	m.handlePackage(t.Context(), newPackage(frame, false))
-
-	assert.Equal(t, float64((100*24+12)*3600+10*60),
-		testutil.ToFloat64(m.mustCollector(t, RegFilterRemaining)))
-	assert.Equal(t, float64(160*24*3600),
-		testutil.ToFloat64(m.mustCollector(t, RegFilterInterval)))
-}
-
 func TestMetricsExporterExportsEveryDeclaredGauge(t *testing.T) {
 	_, registry := newTestExporter(t)
 
@@ -197,4 +183,29 @@ func TestMetricsExporterExportsEveryDeclaredGauge(t *testing.T) {
 		}
 		assert.True(t, names[name], "%s is declared but not registered", name)
 	}
+}
+
+// TestMetricsExporterMatchesThePanel replays the registers behind the readings
+// the unit's own panel showed on 2026-09-12 at 12:15. The counters in
+// particular were guesswork until that screen put both of them side by side:
+// 0x85 counts the fan, not merely something trailing 0x26, and the configured
+// filter interval is 0x3d rather than 0x3a.
+func TestMetricsExporterMatchesThePanel(t *testing.T) {
+	m, _ := newTestExporter(t)
+	frame := decodeHex(t, "01008521 0000"+
+		"0000 010701"+ // Software-Versionen: BUS-Version 1.7.1
+		"2600 11113b0004"+ // Betriebsstunden insgesamt: 4 y 59 d 17:17
+		"3d00 0000a00000"+ // Filterlaufzeit voreingestellt: 160 days
+		"3e00 00003e0000"+ // Filterlaufzeit Restlaufzeit: 62 days
+		"8500 280327 0004") // Betriebsstunden Lüfter: 4 y 39 d 03:40
+	frame[4], frame[5] = crcOf(frame)
+
+	m.handlePackage(t.Context(), newPackage(frame, false))
+
+	assert.Equal(t, float64((4*365+59)*86400+17*3600+17*60),
+		testutil.ToFloat64(m.mustCollector(t, RegOperatingTime)), "insgesamt")
+	assert.Equal(t, float64((4*365+39)*86400+3*3600+40*60),
+		testutil.ToFloat64(m.mustCollector(t, RegOperatingTimeFan)), "Lüfter")
+	assert.Equal(t, float64(160*86400), testutil.ToFloat64(m.mustCollector(t, RegFilterInterval)))
+	assert.Equal(t, float64(62*86400), testutil.ToFloat64(m.mustCollector(t, RegFilterRemaining)))
 }
