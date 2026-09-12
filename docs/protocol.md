@@ -161,15 +161,16 @@ Value types:
 | `0x1a` |     1 | status word                      | 0.3 s  | 0, 1, 13         | inferred   |
 | `0x08` |     1 | start and shutdown marker        | event  | 0, 1, 3          | inferred   |
 | `0x0e` |     1 | error code, never ≠ 0 in 12 days | 0.25 s | 0                | inferred   |
-| `0x27` |     1 | operating mode, only on change   | event  | 4, 6             | measured   |
-| `0x28` |     1 | operating mode, only on change   | event  | 4, 6             | measured   |
+| `0x27` |     1 | operating mode running, on change | event | 4, 5, 6          | measured   |
+| `0x28` |     1 | operating mode running, on change | event | 4, 5, 6          | measured   |
+| `0x29` |     1 | operating mode to fall back to    | event | 5, 6             | measured   |
 | `0x44` |     1 | unidentified, 136 – 141          | 3.5 s  | see below        | open       |
 | `0x25` |     1 | constant 0x36                    | 60 s   | 54               | open       |
 | `0x09` |    16 | name slot of the third node, which reports none | 60 s | `00` + 15 spaces | measured |
 
-`0x27` and `0x28` carry the mode codes from the `Lüfterstufen` sheet: 1 – 3 fan
-stage, 4 boost, 5 away, 6 automatic. They move together. `0x29` stays at 6 even
-while the unit is boosting, so it is not the current mode.
+`0x27`, `0x28` and `0x29` carry the mode codes from the `Lüfterstufen` sheet:
+1 – 3 fan stage, 4 boost, 5 away, 6 automatic. `0x27` and `0x28` move together
+and hold the mode that is running; `0x29` holds the one to fall back to.
 
 `0x1d` reads 1 in normal operation, drops to 0 during an orderly shutdown and
 reports 3 for the first seconds after a start. `0x08` reports 0 immediately
@@ -274,22 +275,30 @@ On 2026-07-09 the same happens with an excursion to 45.5 %, where `0x55` reads
 458. `0x44` does not move in either case, which rules it out as air volume or
 fan speed.
 
-**The operating mode `0x27` and `0x28`** on 2026-07-20: at 08:25:11 both report
-4, at 08:54:19 they report 6 again — somebody pressed boost on the panel and the
-unit fell back to automatic 29 minutes later. `0x29` stayed at 6 throughout, so
-it holds something else, most likely the mode to return to.
+**The operating mode `0x27`, `0x28` and `0x29`** were watched live on
+2026-09-12 while the modes were selected on the panel one after another, with
+`shelly_power_w` alongside:
 
-The boost took effect: `shelly_power_w` went from 18 W to 94-97 W for exactly
-those 29 minutes, the level a 70 % setpoint over KNX produces. Repeated live on
-2026-09-12, where pressing boost took the draw from 19 W to 104 W.
+| Mode selected | `0x27` | `0x28` | `0x29` | Power draw |
+| ------------- | -----: | -----: | -----: | ---------: |
+| automatic     |      6 |      6 |      6 |     19 W   |
+| boost         |      4 |      4 |  **6** |    103 W   |
+| away          |      5 |      5 |  **5** |     16 W   |
 
-What does *not* move with it is `0x55`, which held 24.7 % throughout, and `0x44`,
-which held 139. So `0x55` reports the 0-10 V input and nothing else — not the
-fan's actual output — and no register in this map reports that output. For "when
-was boost active" the answer is `0x27`/`0x28` for the panel and `0x55` for KNX;
-a boost driven over KNX is a short upward excursion of `0x55` while the mode
-stays at 6, and one pressed on the panel is the mode going to 4 while `0x55`
-stays put.
+Both modes take effect, boost upward and away downward. `0x27` and `0x28` carry
+the mode that is running; `0x29` only follows for away and stays at 6 through a
+boost, which fits a field holding the mode to return to, since a boost expires
+by itself while away lasts until it is changed. The same boost is in the
+recordings: on 2026-07-20 `0x28` read 4 from 08:25:11 to 08:54:19 and the draw
+sat at 94 to 97 W for exactly those 29 minutes.
+
+What does *not* move through any of it is `0x55`, which held 24.7 % throughout,
+and `0x44`, which held 139. So `0x55` reports the 0-10 V input and nothing else
+— not the fan's actual output — and no register in this map reports that output.
+For "when was boost active" the answer is therefore `0x27`/`0x28` for the panel
+and `0x55` for KNX: a boost driven over KNX is a short upward excursion of
+`0x55` while the mode stays at 6, one pressed on the panel is the mode going to
+4 while `0x55` stays put.
 
 **The acknowledgements `0x87`** because their three payload bytes are `00` plus
 the CRC bytes of the data frame sent immediately before.
