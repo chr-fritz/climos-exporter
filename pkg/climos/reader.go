@@ -99,16 +99,13 @@ loop:
 			data = append(data, buf[:n]...)
 
 			for {
-				bytes, newStart, err := extractPackage(data)
+				extracted, err := extractPackage(data)
 				if err != nil && errors.Is(err, ErrorToShort) {
 					break
 				}
 
-				// Advance past the extracted package. `extractPackage` returns the index of
-				// the last byte of the package (end-1). Move to `newStart+1` to avoid
-				// re-including the trailing byte, which can cause desynchronization.
-				data = append([]byte{}, data[newStart+1:]...)
-				r.packagesChan <- newPackage(bytes)
+				data = append([]byte{}, data[extracted.NextStart:]...)
+				r.packagesChan <- newPackage(extracted.Data, extracted.Repaired)
 			}
 			time.Sleep(1 * time.Second)
 		}

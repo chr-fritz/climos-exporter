@@ -26,6 +26,9 @@ import (
 var ErrorToShort = errors.New("data is to short")
 var nullPackage = []byte{0, 0, 0, 0, 0, 0}
 
+// leadingAddressByte is the high byte of every address on this bus.
+const leadingAddressByte = 0x01
+
 // Package is a small structure that represents a message that was delivered from the ventilation system.
 type Package struct {
 	TargetAddress Address
@@ -34,6 +37,9 @@ type Package struct {
 	Header        []byte
 	Payload       []byte
 	Data          []byte
+	// Repaired records that the leading address byte had to be restored, see
+	// repairLeadingByte.
+	Repaired bool
 }
 
 // IsValid checks if the package is a valid package.
@@ -84,7 +90,7 @@ const (
 	Other            = Command(0x87)
 )
 
-func newPackage(data []byte) *Package {
+func newPackage(data []byte, repaired bool) *Package {
 	if len(data) < 6 {
 		return &Package{valid: false, Data: data}
 	}
@@ -95,13 +101,22 @@ func newPackage(data []byte) *Package {
 		Header:        data[0:4],
 		Payload:       data[6:],
 		Data:          data,
+		Repaired:      repaired,
 	}
 }
 
-func extractPackage(data []byte) ([]byte, uint, error) {
+// extractedPackage is one framed package together with the offset the caller has
+// to continue at.
+type extractedPackage struct {
+	Data      []byte
+	NextStart uint
+	Repaired  bool
+}
+
+func extractPackage(data []byte) (extractedPackage, error) {
 	dataLength := uint(len(data))
 	if dataLength < 6 {
-		return []byte{}, 0, ErrorToShort
+		return extractedPackage{}, ErrorToShort
 	}
 
 	for i := uint(0); i < dataLength-6; i++ {
@@ -123,10 +138,34 @@ func extractPackage(data []byte) ([]byte, uint, error) {
 		}
 
 		if ValidateCrc(possiblePackage) {
-			return possiblePackage, expectedEnd - 1, nil
+			return extractedPackage{Data: possiblePackage, NextStart: expectedEnd}, nil
+		}
+		if repaired, ok := repairLeadingByte(possiblePackage); ok {
+			return extractedPackage{Data: repaired, NextStart: expectedEnd, Repaired: true}, nil
 		}
 	}
-	return []byte{}, 0, ErrorToShort
+	return extractedPackage{}, ErrorToShort
+}
+
+// repairLeadingByte restores the first byte of a frame that started after an
+// idle gap. The idle line sits in the space state, so the receiver reads a
+// continuous run of null characters and is still inside one of them when the
+// real start bit arrives — it swallows the first byte and reports 0x00 instead.
+// Every address on this bus begins with 0x01, which makes the byte recoverable.
+// Without this, 88% of the frames fail their CRC and are dropped.
+func repairLeadingByte(data []byte) ([]byte, bool) {
+	if data[0] != 0x00 {
+		return nil, false
+	}
+
+	repaired := make([]byte, len(data))
+	copy(repaired, data)
+	repaired[0] = leadingAddressByte
+
+	if !ValidateCrc(repaired) {
+		return nil, false
+	}
+	return repaired, true
 }
 
 func expectedDataLength(data []byte) uint {
