@@ -106,8 +106,11 @@ func (o *ReplayOptions) run(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Every report below writes through a tabwriter onto this same writer and
+	// ends in a Flush whose error is returned, so a broken output is reported
+	// there rather than at each individual write.
 	out := cmd.OutOrStdout()
-	fmt.Fprintf(out, "frames=%d repaired=%d (%.1f%%) data=%d undecodable=%d\n\n",
+	_, _ = fmt.Fprintf(out, "frames=%d repaired=%d (%.1f%%) data=%d undecodable=%d\n\n",
 		stats.Frames, stats.Repaired, repairedShare(stats), stats.DataFrames, stats.Undecodable)
 
 	switch {
@@ -140,7 +143,7 @@ func (o *ReplayOptions) writeComparison(out io.Writer, analyzer *climos.Analyzer
 	}
 
 	writer := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(writer, "REGISTER\tTHIS\tAGAINST")
+	_, _ = fmt.Fprintln(writer, "REGISTER\tTHIS\tAGAINST")
 
 	before := lastValues(other)
 	for _, profile := range stableProfiles(analyzer, o.maxChanges) {
@@ -151,7 +154,7 @@ func (o *ReplayOptions) writeComparison(out io.Writer, analyzer *climos.Analyzer
 		if !seen || bytes.Equal(was, profile.Last) {
 			continue
 		}
-		fmt.Fprintf(writer, "%s\t%x\t%x\n", profile.Register, profile.Last, was)
+		_, _ = fmt.Fprintf(writer, "%s\t%x\t%x\n", profile.Register, profile.Last, was)
 	}
 	return writer.Flush()
 }
@@ -189,13 +192,13 @@ func repairedShare(stats climos.ReplayStats) float64 {
 
 func writeProfiles(out io.Writer, analyzer *climos.Analyzer, selected map[climos.Register]bool) error {
 	writer := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(writer, "REGISTER\tFRAMES\tCHANGES\tDISTINCT\tFIRST\tLAST")
+	_, _ = fmt.Fprintln(writer, "REGISTER\tFRAMES\tCHANGES\tDISTINCT\tFIRST\tLAST")
 
 	for _, profile := range analyzer.Profiles() {
 		if !wanted(selected, profile.Register) {
 			continue
 		}
-		fmt.Fprintf(writer, "%s\t%d\t%d\t%d\t%x\t%x\n",
+		_, _ = fmt.Fprintf(writer, "%s\t%d\t%d\t%d\t%x\t%x\n",
 			profile.Register, profile.Frames, profile.Changes, profile.Distinct, profile.First, profile.Last)
 	}
 	return writer.Flush()
@@ -205,7 +208,7 @@ func (o *ReplayOptions) writeChanges(out io.Writer, analyzer *climos.Analyzer, s
 	counts := analyzer.ChangeCounts()
 
 	writer := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(writer, header(start))
+	_, _ = fmt.Fprintln(writer, header(start))
 
 	for _, change := range analyzer.Changes() {
 		if !wanted(selected, change.Register) {
@@ -214,7 +217,7 @@ func (o *ReplayOptions) writeChanges(out io.Writer, analyzer *climos.Analyzer, s
 		if o.tooNoisy(counts[change.Register], selected) {
 			continue
 		}
-		fmt.Fprintf(writer, "%s\t%d\t%s\t%x\t%x\n",
+		_, _ = fmt.Fprintf(writer, "%s\t%d\t%s\t%x\t%x\n",
 			runningTime(change.Elapsed, start), change.Offset, change.Register, change.From, change.To)
 	}
 	return writer.Flush()
