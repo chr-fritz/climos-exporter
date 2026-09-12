@@ -18,195 +18,90 @@ package climos
 
 import (
 	"context"
-	"encoding/binary"
+	"errors"
 	"fmt"
 	"log/slog"
-	"math"
-
-	"github.com/yerden/go-util/bcd"
+	"strings"
 )
 
-type SubCommand int
-
-func (c SubCommand) String() string {
-	bs := make([]byte, 4)
-	binary.LittleEndian.PutUint32(bs, uint32(c))
-
-	command := asHex(bs)
-	switch c {
-	case SetLanguage:
-		return "set language(" + command + ")"
-	case SetFanSpeed:
-		return "set fan speed(" + command + ")"
-	case TimeLeftToFilterReplacement:
-		return "filter replacement(" + command + ")"
-	case Bypass:
-		return "bypass(" + command + ")"
-	case OperatingHours:
-		return "operating hours(" + command + ")"
-	case Temperatures:
-		return "temperatures(" + command + ")"
-	default:
-		return "unknown(" + command + ")"
-	}
-}
-
-const (
-	SetLanguage                 = SubCommand(0x06)
-	SetFanSpeed                 = SubCommand(0x08)
-	TimeLeftToFilterReplacement = SubCommand(0x09)
-	Bypass                      = SubCommand(0x1a)
-	OperatingHours              = SubCommand(0x26)
-	Temperatures                = SubCommand(0x44)
-)
+// ErrNoRegisterData reports a package whose command carries no register records.
+var ErrNoRegisterData = errors.New("package carries no register data")
 
 type ParsedPackage interface {
 	GetPackageType() string
 	String() string
 }
 
+// DataPackage holds the register values that one data frame carried.
+type DataPackage struct {
+	Values []RegisterValue
+}
+
+func (d *DataPackage) GetPackageType() string {
+	return "data"
+}
+
+func (d *DataPackage) String() string {
+	parts := make([]string, 0, len(d.Values))
+	for _, value := range d.Values {
+		parts = append(parts, fmt.Sprintf("%s=%s", value.Register, asHex(value.Raw)))
+	}
+	return "Got registers: " + strings.Join(parts, " ")
+}
+
+// ParsePackage decodes a package's payload. A payload that stops at an unknown
+// register yields both the records decoded before it and the error, so a caller
+// can keep those values and still report the gap.
 func ParsePackage(ctx context.Context, p *Package) (ParsedPackage, error) {
 	if !p.IsValid() {
 		return nil, fmt.Errorf("package is invalid")
 	}
 
 	switch p.Command {
-	case Status:
-		return parseOtherCommand(ctx, p)
-	case BroadcastRequest:
-		return parseOtherCommand(ctx, p)
-	case BroadcastAnswer:
-		return parseOtherCommand(ctx, p)
-	case Alive:
-		return parseOtherCommand(ctx, p)
-	case GetSet:
-		return parseGetSetCommand(ctx, p)
-	case Ask:
-		return parseOtherCommand(ctx, p)
-	case Other:
-		return parseOtherCommand(ctx, p)
+	case BroadcastRequest, BroadcastAnswer, GetSet:
+		return parseDataCommand(ctx, p)
 	default:
+		logCommandWithoutData(ctx, p)
+		return nil, fmt.Errorf("%w: %s", ErrNoRegisterData, p.Command)
+	}
+}
+
+// parseDataCommand keeps the records decoded before a failure: an unknown
+// register at the end of a payload must not cost us the values in front of it.
+func parseDataCommand(ctx context.Context, p *Package) (ParsedPackage, error) {
+	values, err := decodeRegisters(p.Payload)
+	if err != nil {
 		slog.With(
 			"command", p.Command.String(),
 			"address", p.TargetAddress.String(),
 			"payload", asHex(p.Payload),
-			"payload-as-bcd", asBcd(p.Payload),
-		).DebugContext(ctx, "Got unknown command")
-		return nil, fmt.Errorf("unknown command %x", p.Command)
-	}
-}
-
-func parseGetSetCommand(ctx context.Context, p *Package) (ParsedPackage, error) {
-	subCmd := SubCommand(p.Payload[0])
-	logger := slog.With(
-		"command", p.Command.String(),
-		"subCommand", subCmd.String(),
-		"address", p.TargetAddress.String(),
-		"payload", asHex(p.Payload),
-		"payload-as-bcd", asBcd(p.Payload),
-	)
-	switch subCmd {
-	case Temperatures:
-		return parseTemperatures(ctx, p)
-	case TimeLeftToFilterReplacement:
-		logger.With(
-			"hex-value", asHex(p.Payload[23:27]),
-			"value", binary.BigEndian.Uint32(p.Payload[23:27]),
-		).InfoContext(ctx, "Got message with reaming time for filters")
-
-		return nil, fmt.Errorf("missing impl for filter time")
-	default:
-		logger.DebugContext(ctx, "Got unknown sub-command of command get set")
-		return nil, fmt.Errorf("unknown sub command %x of command 0x85", subCmd)
-	}
-}
-
-type TemperaturePackage struct {
-	IndoorInTemperature  float64
-	OutsideTemperature   float64
-	IndoorOutTemperature float64
-	HouseOutTemperature  float64
-}
-
-func (t *TemperaturePackage) GetPackageType() string {
-	return "temperature"
-}
-
-func (t *TemperaturePackage) String() string {
-	return fmt.Sprintf("Got temperatures:\n"+
-		"\tOutside:\t%5.2f"+
-		"\tIndoor In:\t%5.2f"+
-		"\tIndoor Out:\t%5.2f"+
-		"\tHouse Out:\t%5.2f",
-		t.OutsideTemperature,
-		t.IndoorInTemperature,
-		t.IndoorOutTemperature,
-		t.HouseOutTemperature)
-}
-
-var noTemperatures = &TemperaturePackage{
-	math.NaN(),
-	math.NaN(),
-	math.NaN(),
-	math.NaN(),
-}
-
-func parseTemperatures(ctx context.Context, p *Package) (ParsedPackage, error) {
-	t := &TemperaturePackage{
-		extractTemperature(p.Data[9:13]),
-		extractTemperature(p.Data[13:17]),
-		extractTemperature(p.Data[17:21]),
-		extractTemperature(p.Data[21:25]),
+			"error", err,
+		).DebugContext(ctx, "Could not decode the whole payload")
 	}
 
-	logger := slog.With(
-		"outside", t.OutsideTemperature,
-		"indoor_in", t.IndoorInTemperature,
-		"indoor_out", t.IndoorOutTemperature,
-		"house_out", t.HouseOutTemperature,
-	)
-	if logger.Enabled(context.Background(), slog.LevelDebug) {
-		logger = logger.With(
-			"command", p.Command.String(),
-			"address", p.TargetAddress.String(),
-			"payload", asHex(p.Payload),
-			"data", asHex(p.Data),
-		)
+	if len(values) == 0 {
+		if err == nil {
+			err = fmt.Errorf("%w: empty payload", ErrNoRegisterData)
+		}
+		return nil, err
 	}
-	logger.InfoContext(ctx, "got temperatures")
-	return t, nil
+	return &DataPackage{Values: values}, err
 }
 
-func extractTemperature(b []byte) float64 {
-	// Implement extractTemp function here
-	temp := float64(b[2]) / 10.0
-	if b[3] > 128 {
-		temp -= float64(256-int(b[3])) * 25.6
-	} else {
-		temp += float64(int(b[3])) * 25.6
+// logCommandWithoutData builds its attributes only when they will be written:
+// the polls it reports are by far the most frequent frames on the bus.
+func logCommandWithoutData(ctx context.Context, p *Package) {
+	if !slog.Default().Enabled(ctx, slog.LevelDebug) {
+		return
 	}
-	return temp
-}
-
-func parseOtherCommand(ctx context.Context, p *Package) (ParsedPackage, error) {
 	slog.With(
 		"command", p.Command.String(),
 		"address", p.TargetAddress.String(),
 		"payload", asHex(p.Payload),
-		"payload-as-bcd", asBcd(p.Payload),
 		"data", asHex(p.Data),
-	).DebugContext(ctx, "Got known but not implemented command")
-	return nil, fmt.Errorf("unknown command")
+	).DebugContext(ctx, "Got command without register data")
 }
 
 func asHex(data []byte) string {
-	// Implement asHex function here
 	return fmt.Sprintf("0x%x", data)
-}
-
-func asBcd(data []byte) string {
-	decoder := bcd.NewDecoder(bcd.Standard)
-	bytes := make([]byte, 2*len(data))
-	n, _ := decoder.Decode(bytes, data)
-	return string(bytes[:n])
 }

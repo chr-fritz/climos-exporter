@@ -17,46 +17,74 @@
 package climos
 
 import (
-	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParsePackage(t *testing.T) {
 	tests := []struct {
-		name    string
-		data    []byte
-		want    ParsedPackage
-		wantErr bool
+		name         string
+		data         string
+		wantErr      error
+		wantRegister Register
+		wantTenths   float64
 	}{
-		{"Invalid Package", []byte{0x00, 0x00, 0x00, 0x0e, 0x7b, 0x01, 0x01, 0x00, 0x05, 0x17, 0x06, 0x12, 0x02, 0x00, 0x37, 0x25, 0x13, 0x04, 0x00, 0x00}, nil, true},
-		{
-			"Valid Temperatures",
-			[]byte{0x01, 0x00, 0x85, 0x13, 0xd9, 0xaa, 0x44, 0x00, 0x8c, 0x81, 0x00, 0xdc, 0x00, 0x82, 0x00, 0x7d, 0x00, 0x83, 0x00, 0xeb, 0x00, 0x84, 0x00, 0x8c, 0x00},
-			&TemperaturePackage{
-				IndoorInTemperature:  22,
-				OutsideTemperature:   12.5,
-				IndoorOutTemperature: 23.5,
-				HouseOutTemperature:  14,
-			},
-			false,
-		},
-		{
-			"Unknown Temperatures",
-			[]byte{0x01, 0x00, 0x85, 0x21, 0x08, 0xd3, 0x26, 0x00, 0x3a, 0x10, 0x74, 0x00, 0x01, 0x44, 0x00, 0x8c, 0x81, 0x00, 0xdc, 0x00, 0x82, 0x00, 0x78, 0x00, 0x83, 0x00, 0xeb, 0x00, 0x84, 0x00, 0x8c, 0x00, 0x85, 0x00, 0x38, 0x00, 0x74, 0x00, 0x01},
-			nil,
-			true,
-		},
+		{"invalid package", "0000000e7b0101000517061202003725130400", ErrNoRegisterData, 0, 0},
+		{"poll without payload", "010484002 87d", ErrNoRegisterData, 0, 0},
+		{"temperatures", "01008513d9aa4400 8c 8100dc00 82007d00 8300eb00 84008c00", nil, RegTemperatureOutside, 12.5},
+		{"temperatures with counters", "01008521c79126000804ba000144008e8100d20082004b008300eb00840064008500060cb90001", nil, RegTemperatureOutside, 7.5},
+		{"fan setpoint", "0100850429e5550 0f200", nil, RegFanSetpoint, 24.2},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ParsePackage(t.Context(), newPackage(tt.data, false))
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ParsePackage() error = %v, wantErr %v", err, tt.wantErr)
+			got, err := ParsePackage(t.Context(), newPackage(decodeHex(t, tt.data), false))
+			if tt.wantErr != nil {
+				assert.ErrorIs(t, err, tt.wantErr)
+				assert.Nil(t, got)
 				return
 			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("ParsePackage() got = %v, want %v", got, tt.want)
-			}
+
+			require.NoError(t, err)
+			data, ok := got.(*DataPackage)
+			require.True(t, ok, "expected a DataPackage, got %T", got)
+			assert.Equal(t, tt.wantTenths, findRegister(t, data, tt.wantRegister).Tenths())
 		})
 	}
+}
+
+func TestParsePackageKeepsValuesBeforeAnUnknownRegister(t *testing.T) {
+	// A temperature frame with 0x84 replaced by the unassigned register 0x8f.
+	data := decodeHex(t, "01008513a9464400 8c 8100dc00 82007d00 8300eb00 8f008c00")
+	data[4], data[5] = crcOf(data)
+
+	got, err := ParsePackage(t.Context(), newPackage(data, false))
+
+	var unknown UnknownRegisterError
+	require.ErrorAs(t, err, &unknown, "the caller has to learn which register stopped the walk")
+	assert.Equal(t, Register(0x8f), unknown.Register)
+
+	values := got.(*DataPackage).Values
+	assert.Len(t, values, 4, "the records in front of the unknown one must survive")
+	assert.Equal(t, 23.5, findRegister(t, got.(*DataPackage), RegTemperatureIndoorOut).Tenths())
+}
+
+func TestDataPackageString(t *testing.T) {
+	got, err := ParsePackage(t.Context(), newPackage(decodeHex(t, "0100850429e555 00f200"), false))
+
+	require.NoError(t, err)
+	assert.Equal(t, "Got registers: 0x55=0xf200", got.String())
+	assert.Equal(t, "data", got.GetPackageType())
+}
+
+func findRegister(t *testing.T, data *DataPackage, register Register) RegisterValue {
+	t.Helper()
+	for _, value := range data.Values {
+		if value.Register == register {
+			return value
+		}
+	}
+	t.Fatalf("register %s not found in %s", register, data)
+	return RegisterValue{}
 }
