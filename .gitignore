@@ -6,3 +6,9 @@ bin/
 reports/
 .sonarcloud.properties
 tests/
+
+# Recorded bytestreams and the material they were analysed against. These are
+# local to one installation and the spreadsheet is third party work.
+dumps/
+*.xlsx
+Logs-*.json
