@@ -88,3 +88,34 @@ func findRegister(t *testing.T, data *DataPackage, register Register) RegisterVa
 	t.Fatalf("register %s not found in %s", register, data)
 	return RegisterValue{}
 }
+
+func TestParsePackageRejectsPackagesWithoutRegisterData(t *testing.T) {
+	tests := []struct {
+		name string
+		data string
+	}{
+		{"too short to be a package", "0100"},
+		{"keep alive poll", "010484002 87d"},
+		{"acknowledgement", "0101878398 2a00bcf6"},
+		{"get set without payload", "0100850000 00"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParsePackage(t.Context(), newPackage(decodeHex(t, tt.data), false))
+
+			assert.Error(t, err)
+			assert.Nil(t, got, "a caller must not have to check for a typed nil")
+		})
+	}
+}
+
+func TestParsePackageReportsATruncatedPayload(t *testing.T) {
+	// The length byte promises two payload bytes, which is one short of 0x81.
+	data := decodeHex(t, "010085020000 8100")
+	data[4], data[5] = crcOf(data)
+
+	got, err := ParsePackage(t.Context(), newPackage(data, false))
+
+	assert.ErrorIs(t, err, ErrTruncatedPayload)
+	assert.Nil(t, got)
+}

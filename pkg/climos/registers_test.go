@@ -117,3 +117,44 @@ func sliceOrNil(registers []Register) []Register {
 	}
 	return registers
 }
+
+func TestRegisterValue_IntRejectsWidthsItCannotRepresent(t *testing.T) {
+	assert.Equal(t, int64(0), RegisterValue{}.Int(), "an absent register has no number")
+	assert.Equal(t, int64(0), RegisterValue{Raw: make([]byte, 11)}.Int(), "text is not a number")
+	assert.Equal(t, int64(-1), RegisterValue{Raw: decodeHex(t, "ffffffffffffffff")}.Int())
+}
+
+func TestRegisterValue_DurationOnlyReadsCounters(t *testing.T) {
+	assert.Zero(t, RegisterValue{Raw: decodeHex(t, "dc00")}.Duration(),
+		"a two byte register is not a counter")
+}
+
+func TestRegisterValue_IsNumeric(t *testing.T) {
+	for _, width := range []int{1, 2, 3, 4} {
+		assert.True(t, RegisterValue{Raw: make([]byte, width)}.IsNumeric(), "width %d", width)
+	}
+	for _, width := range []int{0, counterWidth, articleWidth, nameWidth} {
+		assert.False(t, RegisterValue{Raw: make([]byte, width)}.IsNumeric(), "width %d", width)
+	}
+}
+
+func TestUnknownRegisterError(t *testing.T) {
+	err := UnknownRegisterError{Register: 0x8f, Offset: 15}
+
+	assert.ErrorIs(t, err, ErrUnknownRegister)
+	assert.Equal(t, "unknown register 0x8f at offset 15", err.Error())
+}
+
+func TestRegisterWidthsCoverEveryNamedRegister(t *testing.T) {
+	named := []Register{
+		RegLifecycle, RegArticleMaster, RegError, RegArticleFan, RegStatusWord,
+		RegArticlePanel, RegRunState, RegOperatingTime, RegOperatingMode,
+		RegFilterInterval, RegFilterRemaining, RegFanSetpoint,
+		RegTemperatureIndoorIn, RegTemperatureOutside, RegTemperatureIndoorOut,
+		RegTemperatureHouseOut, RegOperatingTimeSecond, RegNameFanController, RegNamePanel,
+	}
+	for _, register := range named {
+		_, known := registerWidths[register]
+		assert.True(t, known, "register %s is named but has no width", register)
+	}
+}

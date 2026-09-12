@@ -165,3 +165,35 @@ climos_unknown_registers_total{register="0x8f"} 1
 	assert.Equal(t, 23.5, testutil.ToFloat64(m.mustCollector(t, RegTemperatureIndoorOut)),
 		"the values in front of the unknown register still have to be stored")
 }
+
+func TestMetricsExporterConvertsCountersToSeconds(t *testing.T) {
+	m, _ := newTestExporter(t)
+	// 0x3e counts down to the filter change, 0x3a holds the interval in days.
+	frame := decodeHex(t, "0100850a00003e00 0a0c640000 3a0064")
+	frame[4], frame[5] = crcOf(frame)
+	m.handlePackage(t.Context(), newPackage(frame, false))
+
+	assert.Equal(t, float64((100*24+12)*3600+10*60),
+		testutil.ToFloat64(m.mustCollector(t, RegFilterRemaining)))
+	assert.Equal(t, float64(100*24*3600),
+		testutil.ToFloat64(m.mustCollector(t, RegFilterInterval)))
+}
+
+func TestMetricsExporterExportsEveryDeclaredGauge(t *testing.T) {
+	_, registry := newTestExporter(t)
+
+	families, err := registry.Gather()
+	require.NoError(t, err)
+
+	names := map[string]bool{}
+	for _, family := range families {
+		names[family.GetName()] = true
+	}
+	for _, spec := range gaugeSpecs {
+		name := "climos_" + spec.Name
+		if spec.Subsystem != "" {
+			name = "climos_" + spec.Subsystem + "_" + spec.Name
+		}
+		assert.True(t, names[name], "%s is declared but not registered", name)
+	}
+}

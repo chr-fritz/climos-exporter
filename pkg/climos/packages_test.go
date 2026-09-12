@@ -160,9 +160,6 @@ func Test_newPackage(t *testing.T) {
 // their leading address byte to the idle line; only the two that follow their
 // predecessor without a gap arrive intact.
 func Test_extractPackage_realCapture(t *testing.T) {
-	const capture = "000000000000000085033b390e000000088400490801008500000000000000" +
-		"098400793f0100850329331d0001000000000000000085033b390e00000008" +
-		"8400490801008500000000000000098400793f0100850329331d0001"
 
 	data := decodeHex(t, capture)
 	var addresses []string
@@ -208,4 +205,25 @@ func stripSpaces(s string) string {
 		}
 	}
 	return string(out)
+}
+
+func TestCommand_String(t *testing.T) {
+	tests := []struct {
+		command Command
+		want    string
+	}{
+		{Status, "Status(0x00)"},
+		{BroadcastRequest, "BroadcastRequest(0x80)"},
+		{BroadcastAnswer, "BroadcastAnswer(0x81)"},
+		{Alive, "Alive(0x84)"},
+		{GetSet, "GetSet(0x85)"},
+		{Ask, "Ask(0x86)"},
+		{Other, "Other(0x87)"},
+		{Command(0x42), "Unknown(0x42)"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.want, func(t *testing.T) {
+			assert.Equal(t, tt.want, tt.command.String())
+		})
+	}
 }

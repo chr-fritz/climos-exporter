@@ -96,20 +96,26 @@ loop:
 			if n > 0 {
 				r.writeRaw(buf[:n])
 			}
-			data = append(data, buf[:n]...)
-
-			for {
-				extracted, err := extractPackage(data)
-				if err != nil && errors.Is(err, ErrorToShort) {
-					break
-				}
-
-				data = append([]byte{}, data[extracted.NextStart:]...)
-				r.packagesChan <- newPackage(extracted.Data, extracted.Repaired)
-			}
+			data = r.emitPackages(append(data, buf[:n]...))
 			time.Sleep(1 * time.Second)
 		}
 	}
+}
+
+// emitPackages sends every package the buffer holds and returns what is left
+// over. A package can span two reads, so the remainder has to survive into the
+// next round instead of being discarded.
+func (r *reader) emitPackages(buffer []byte) []byte {
+	for {
+		extracted, err := extractPackage(buffer)
+		if err != nil {
+			break
+		}
+
+		buffer = buffer[extracted.NextStart:]
+		r.packagesChan <- newPackage(extracted.Data, extracted.Repaired)
+	}
+	return append([]byte{}, buffer...)
 }
 
 func (r *reader) close() {
