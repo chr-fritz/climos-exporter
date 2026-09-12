@@ -75,22 +75,16 @@ func Test_extractPackage(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := extractPackage(tt.data)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("extractPackage() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
+
 			if tt.wantErr {
+				assert.Error(t, err)
 				return
 			}
-			if !reflect.DeepEqual(got.Data, tt.want) {
-				t.Errorf("extractPackage() data = %v, want %v", got.Data, tt.want)
-			}
-			if got.NextStart != tt.wantNext {
-				t.Errorf("extractPackage() nextStart = %v, want %v", got.NextStart, tt.wantNext)
-			}
-			if got.Repaired != tt.wantRepaired {
-				t.Errorf("extractPackage() repaired = %v, want %v", got.Repaired, tt.wantRepaired)
-			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got.Data)
+			assert.Equal(t, tt.wantNext, got.NextStart)
+			assert.Equal(t, tt.wantRepaired, got.Repaired)
 		})
 	}
 }

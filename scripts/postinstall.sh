@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-cleanInstall() {
+clean_install() {
     printf "\033[32m Post Install of an clean install\033[0m\n"
     # Step 3 (clean install), enable the service in the proper way for this platform
     echo "# Remove this file to allow auto starts of the climos-exporter daemon through systemd.\n" >/etc/climos-exporter/climos-exporter_not_to_be_run
@@ -29,12 +29,14 @@ cleanInstall() {
     printf "\033[32m Set the enabled flag for the service unit\033[0m\n"
     systemctl enable climos-exporter.service || :
     systemctl restart climos-exporter.service || :
+    return 0
 }
 
 upgrade() {
     printf "\033[32m Post Install of an upgrade\033[0m\n"
     systemctl daemon-reload || :
     systemctl restart climos-exporter.service || :
+    return 0
 }
 
 # Step 2, check if this is a clean install or an upgrade
@@ -49,7 +51,7 @@ fi
 
 case "$action" in
 "1" | "install")
-    cleanInstall
+    clean_install
     ;;
 "2" | "upgrade")
     printf "\033[32m Post Install of an upgrade\033[0m\n"
@@ -58,6 +60,6 @@ case "$action" in
 *)
     # $1 == version being installed
     printf "\033[32m Alpine\033[0m"
-    cleanInstall
+    clean_install
     ;;
 esac

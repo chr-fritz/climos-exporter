@@ -42,7 +42,7 @@ type reader struct {
 	streamLogDay string
 }
 
-func NewReader(dev string, streamLogDir string) Reader {
+func NewReader(dev, streamLogDir string) Reader {
 	return &reader{
 		dev:          dev,
 		packagesChan: make(chan *Package),
