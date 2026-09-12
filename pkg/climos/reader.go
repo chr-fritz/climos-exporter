@@ -19,13 +19,57 @@ package climos
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"go.bug.st/serial"
 )
+
+// Parity selects which half of the bus traffic the receiver accepts. The line
+// sends eleven bit characters — one start bit, nine data bits, one stop bit —
+// and a PC UART reads that by putting its parity bit where the ninth data bit
+// sits. On this controller family the ninth bit marks a character as an
+// address, so space parity passes the data characters and rejects the marked
+// ones while mark parity does the opposite. docs/protocol.md records why space
+// is the setting that yields whole frames.
+type Parity string
+
+const (
+	// ParitySpace is what the exporter runs on.
+	ParitySpace Parity = "space"
+	// ParityMark passes exactly the characters space parity rejects, which is
+	// how a recording answers whether the ninth bit still marks frame starts.
+	ParityMark Parity = "mark"
+	// ParityNone stops the receiver from checking the ninth bit at all. A
+	// character is then ten bits where the line sends eleven, so framing breaks
+	// — it serves to tell an adapter that reports parity errors from one that
+	// drops the bit silently.
+	ParityNone Parity = "none"
+)
+
+var parityModes = map[Parity]serial.Parity{
+	ParitySpace: serial.SpaceParity,
+	ParityMark:  serial.MarkParity,
+	ParityNone:  serial.NoParity,
+}
+
+// ParseParity maps a flag value onto a parity mode.
+func ParseParity(value string) (Parity, error) {
+	parity := Parity(strings.ToLower(strings.TrimSpace(value)))
+	if _, known := parityModes[parity]; !known {
+		return "", fmt.Errorf("unknown parity %q, expected space, mark or none", value)
+	}
+	return parity, nil
+}
+
+// ParityNames lists the accepted values for shell completion.
+func ParityNames() []string {
+	return []string{string(ParitySpace), string(ParityMark), string(ParityNone)}
+}
 
 type Reader interface {
 	Run(ctx context.Context) error
@@ -34,6 +78,7 @@ type Reader interface {
 
 type reader struct {
 	dev          string
+	parity       Parity
 	client       serial.Port
 	packagesChan chan *Package
 	// Optional raw bytestream logging
@@ -42,9 +87,10 @@ type reader struct {
 	streamLogDay string
 }
 
-func NewReader(dev, streamLogDir string) Reader {
+func NewReader(dev, streamLogDir string, parity Parity) Reader {
 	return &reader{
 		dev:          dev,
+		parity:       parity,
 		packagesChan: make(chan *Package),
 		streamLogDir: streamLogDir,
 	}
@@ -55,10 +101,15 @@ func (r *reader) PackagesChan() chan *Package {
 }
 
 func (r *reader) Run(ctx context.Context) error {
+	parity, known := parityModes[r.parity]
+	if !known {
+		return fmt.Errorf("unknown parity %q, expected space, mark or none", r.parity)
+	}
+
 	mode := &serial.Mode{
 		BaudRate:          9600,
 		DataBits:          8,
-		Parity:            serial.SpaceParity,
+		Parity:            parity,
 		StopBits:          serial.OneStopBit,
 		InitialStatusBits: nil,
 	}
@@ -132,6 +183,18 @@ func isPortError(err error, code serial.PortErrorCode) bool {
 	return errors.Is(err, serial.PortError{}) && err.(serial.PortError).Code() == code
 }
 
+// streamLogName names the daily file. A recording taken at anything other than
+// space parity carries the complementary half of the characters and must not be
+// appended to the archive of ordinary recordings, so it gets a name of its own.
+// The zero value is an ordinary recording.
+func (r *reader) streamLogName() string {
+	day := time.Now().Format("2006-01-02")
+	if r.parity == "" || r.parity == ParitySpace {
+		return day
+	}
+	return day + "-" + string(r.parity)
+}
+
 // writeRaw writes bytes to a file named by the current date in `streamLogDir`.
 // If `streamLogDir` is empty, this is a no-op. The file rotates daily and only
 // contains data for the current day.
@@ -140,7 +203,7 @@ func (r *reader) writeRaw(bs []byte) {
 		return
 	}
 	// Determine today's file
-	today := time.Now().Format("2006-01-02")
+	today := r.streamLogName()
 	if r.streamLogDay != today || r.streamLog == nil {
 		// Rotate file
 		if r.streamLog != nil {

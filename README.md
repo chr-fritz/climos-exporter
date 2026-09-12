@@ -51,13 +51,24 @@ Metrics are served at `/metrics`, plus `/live` and `/ready` for probes.
 | `-d`, `--device`  | `/dev/ttyUSB0`   | serial device the unit is connected to                 |
 | `-p`, `--port`    | `8080`           | port the metrics endpoint listens on                   |
 | `--stream-dir`    | *(off)*          | directory for raw bytestream recordings, one per day   |
+| `--parity`        | `space`          | `space`, `mark` or `none`, see below                   |
 | `--log_level`     | `info`           | `trace`, `debug`, `info`, `warn`, `error`              |
 | `--log_format`    | `text`           | `text` or `json`                                       |
 | `--config`        | `~/.climos-exporter.yaml` | config file                                   |
 
-`--device`, `--port` and `--stream-dir` can also come from the environment as
-`EXPORTER_DEVICE`, `EXPORTER_PORT` and `EXPORTER_STREAM_DIR`, or from the config
-file, which is read from `~/.climos-exporter.yaml` unless `--config` points
+`--parity` selects which half of the bus traffic the receiver accepts and is an
+experiment rather than an operating mode. The line sends eleven bit characters,
+nine of them data, and the ninth marks a character as an address on this
+controller family; space parity passes the characters whose ninth bit is zero
+and is the only setting that yields whole frames. Mark parity passes exactly the
+complement, which is how a recording answers whether the marking is still there
+— and if it is, framing no longer has to be guessed. A recording taken at
+anything other than space parity is written to `<date>-<parity>.bin` so it never
+lands in the archive of ordinary recordings.
+
+`--device`, `--port`, `--stream-dir` and `--parity` can also come from the
+environment as `EXPORTER_DEVICE`, `EXPORTER_PORT`, `EXPORTER_STREAM_DIR` and
+`EXPORTER_PARITY`, or from the config file, which is read from `~/.climos-exporter.yaml` unless `--config` points
 elsewhere. The two logging flags take their value from the command line only.
 
 ```yaml

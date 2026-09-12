@@ -112,3 +112,20 @@ func Test_reader_writeRawIsOffWithoutADirectory(t *testing.T) {
 
 	assert.Nil(t, r.streamLog, "no directory configured means no file is opened")
 }
+
+// Test_reader_writeRawSeparatesAnExperiment covers the one way the archive
+// could be corrupted: a mark parity run accepts the characters space parity
+// rejects, so its bytes do not frame against the rest of the day.
+func Test_reader_writeRawSeparatesAnExperiment(t *testing.T) {
+	dir := t.TempDir()
+	r := &reader{streamLogDir: dir, parity: ParityMark}
+	defer func() { require.NoError(t, r.streamLog.Close()) }()
+
+	r.writeRaw(decodeHex(t, "0100850329331d0001"))
+
+	_, err := os.Stat(filepath.Join(dir, time.Now().Format("2006-01-02")+"-mark.bin"))
+	require.NoError(t, err, "a mark parity recording gets its own file")
+
+	_, err = os.Stat(filepath.Join(dir, time.Now().Format("2006-01-02")+".bin"))
+	assert.True(t, os.IsNotExist(err), "the archive of ordinary recordings stays untouched")
+}

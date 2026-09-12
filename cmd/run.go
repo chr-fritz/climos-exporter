@@ -29,11 +29,13 @@ import (
 const RunPortParm = "exporter.port"
 const RunDeviceParm = "exporter.device"
 const RunStreamDirParm = "exporter.stream.dir"
+const RunParityParm = "exporter.parity"
 
 const (
 	portFlag      = "port"
 	deviceFlag    = "device"
 	streamDirFlag = "stream-dir"
+	parityFlag    = "parity"
 )
 
 type RunOptions struct {
@@ -72,6 +74,12 @@ func NewRunCommand() *cobra.Command {
 		return nil, cobra.ShellCompDirectiveFilterFileExt
 	})
 
+	cmd.Flags().String(parityFlag, string(climos.ParitySpace), "Which half of the bus traffic to accept. Space reads the frames; mark reads only the characters space rejects and is an experiment, not an operating mode.")
+	_ = viper.BindPFlag(RunParityParm, cmd.Flags().Lookup(parityFlag))
+	_ = cmd.RegisterFlagCompletionFunc(parityFlag, func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		return climos.ParityNames(), cobra.ShellCompDirectiveNoFileComp
+	})
+
 	return &cmd
 }
 
@@ -106,7 +114,12 @@ func (i *RunOptions) initAndRunMetricsExporter(ctx context.Context, exporter met
 	return metricsExporter, nil
 }
 func (i *RunOptions) initAndRunReader(ctx context.Context, device string) (climos.Reader, error) {
-	reader := climos.NewReader(device, viper.GetString(RunStreamDirParm))
+	parity, err := climos.ParseParity(viper.GetString(RunParityParm))
+	if err != nil {
+		return nil, err
+	}
+
+	reader := climos.NewReader(device, viper.GetString(RunStreamDirParm), parity)
 
 	if e := reader.Run(ctx); e != nil {
 		return nil, e
