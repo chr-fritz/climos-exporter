@@ -127,15 +127,37 @@ wait for a gap.
 ## Recording and replaying the bus
 
 With `--stream-dir` the reader writes the raw bytestream to one file per day.
-Such a file can be run back through the current decoder:
+The `replay` command runs such a file back through the same framer and decoder
+the exporter uses, without touching a serial port.
 
 ```sh
-CLIMOS_DUMP=$PWD/dumps/2026-08-05.bin go test ./pkg/climos/ -run TestReplayDump -v
+climos-exporter replay dumps/2026-08-05.bin
 ```
 
-It prints the frame count, how many needed repairing, how many payloads failed
-to decode and which registers appeared. That is the quickest check of a new
-firmware or a rewired bus against what the protocol notes describe.
+By default it lists every register the recording carried with how often it moved
+— the quickest check of a new firmware or a rewired bus against what the
+protocol notes describe.
+
+```sh
+climos-exporter replay dumps/2026-07-20.bin --changes
+```
+
+`--changes` lists the individual value changes in order, dropping the registers
+that move constantly, so an operating mode selected on the panel stands out from
+the temperatures. Times come from the filter countdown, the only monotone clock
+on the bus; `--start 02:00` puts a wall clock next to it.
+
+```sh
+climos-exporter replay dumps/after.bin --against dumps/before.bin
+```
+
+`--against` compares two recordings and reports the registers whose value
+differs. This is the one that identifies a setting: the settings registers reach
+the bus only in the register dump the master emits after a restart, so a change
+made on the panel becomes visible once the unit has restarted, and both
+recordings have to carry a restart for the comparison to see anything.
+
+`--register 0x44,0x55` restricts any of the three to named registers.
 
 ## Development
 
