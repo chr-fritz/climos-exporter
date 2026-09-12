@@ -1,50 +1,114 @@
-# Zehnder Climos 200 Prometeus Exporter
+# climos-exporter
 
-Liest den RS-485-Bus einer Paul Novus 300 / Zehnder ClimOS mit und stellt die
-Werte als Prometheus-Metriken bereit.
+[![Go build](https://github.com/chr-fritz/climos-exporter/actions/workflows/go.yaml/badge.svg)](https://github.com/chr-fritz/climos-exporter/actions/workflows/go.yaml)
+[![Quality gate](https://sonarcloud.io/api/project_badges/measure?project=chr-fritz_climos-exporter&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=chr-fritz_climos-exporter)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-[`docs/protocol.md`](docs/protocol.md) beschreibt das Protokoll: Frameformat,
-die Registerkarte mit allen bekannten Breiten und Bedeutungen, und woran die
-Bedeutungen jeweils festgemacht sind.
+Reads the internal RS-485 bus of a Paul Novus 300 / Zehnder ClimOS heat recovery
+ventilation unit and exposes what it carries as Prometheus metrics.
 
-## Metriken
+The unit has no documented interface. The bus protocol was reverse engineered
+from recorded bytestreams and is written down in
+[`docs/protocol.md`](docs/protocol.md), together with the evidence behind each
+register's meaning and the points that are still open.
 
-| Metrik                                  | Register        | Bedeutung                                              |
-| --------------------------------------- | --------------- | ------------------------------------------------------ |
-| `climos_temperatures_indoor_in`          | `0x81`          | Zuluft in °C                                           |
-| `climos_temperatures_outside`            | `0x82`          | Außenluft in °C                                        |
-| `climos_temperatures_indoor_out`         | `0x83`          | Abluft in °C                                           |
-| `climos_temperatures_house_out`          | `0x84`          | Fortluft in °C                                         |
-| `climos_fan_setpoint_percent`            | `0x55`          | Lüfter-Sollwert, entspricht dem 0–10-V-Eingang         |
-| `climos_operating_mode`                  | `0x28`          | am Bedienteil gewählte Betriebsart                     |
-| `climos_filter_remaining_seconds`        | `0x3e`          | Restzeit bis zum Filterwechsel                         |
-| `climos_filter_interval_seconds`         | `0x3a`          | eingestelltes Wechselintervall                         |
-| `climos_operating_seconds{counter=…}`    | `0x26`, `0x85`  | Betriebszeit                                           |
-| `climos_run_state`                       | `0x1d`          | Laufzustand                                            |
-| `climos_status_word`                     | `0x1a`          | Statuswort                                             |
-| `climos_lifecycle_state`                 | `0x08`          | Start- und Abschaltmarke                               |
-| `climos_error_code`                      | `0x0e`          | Fehlercode                                             |
-| `climos_register{register=…}`            | alle            | Rohwert jedes numerischen Registers                    |
-| `climos_device_info{…}`                  | Identität       | Artikelnummern und Gerätenamen                         |
-| `climos_bus_restarts_total`              | —               | Neustarts, einer je Adressscan                         |
-| `climos_frames_total{result=…}`          | —               | gelesene Frames, nach Framing-Ergebnis                 |
-| `climos_unknown_registers_total{register=…}` | —          | verworfene Records mit unbekannter Registerbreite       |
-| `climos_last_package_timestamp_seconds`  | —               | Zeitpunkt des letzten gelesenen Frames                 |
+## What you need
 
-Steigt `climos_unknown_registers_total`, meldet ein Gerät ein Register, dessen
-Breite hier nicht hinterlegt ist — dann geht der Rest dieses Frames verloren.
-[`docs/protocol.md`](docs/protocol.md) beschreibt, wie man die Breite aus dem
-nächsten Registerabzug nachträgt.
+A passive RS-485 to USB adapter on the unit's bus — an FTDI FT232R works. The
+bus runs at 9600 baud, 8 data bits, space parity, one stop bit; the exporter
+configures that itself, you only pass the device node.
 
-Ein Register, das noch nie gesehen wurde, meldet `NaN` statt 0. Die einmal pro
-Minute gesendeten und die nur nach einem Neustart gesendeten Register fehlen
-nach dem Start also für eine Weile.
+Reading is passive. The exporter never writes to the bus.
 
-## Aufzeichnungen auswerten
+> **Note on wiring.** The bus idles in the space state, which the receiver reads
+> as a continuous run of null characters. That costs the first byte of most
+> frames; the exporter reconstructs it, see
+> [the protocol notes](docs/protocol.md#the-bytestream-and-its-defect). Watch
+> `climos_frames_total{result="repaired"}` — if fail-safe bias is present on the
+> A/B pair, that share drops towards zero.
 
-Mit `--stream-log-dir` schreibt der Reader den rohen Bytestrom tageweise mit.
-Eine solche Datei lässt sich gegen den aktuellen Decoder laufen lassen:
+## Running it
+
+```sh
+docker run --rm --device /dev/ttyUSB0 -p 8080:8080 \
+  ghcr.io/chr-fritz/climos-exporter:latest run -d /dev/ttyUSB0
+```
+
+Images are published for `linux/amd64` and `linux/arm` at
+[ghcr.io/chr-fritz/climos-exporter](https://ghcr.io/chr-fritz/climos-exporter);
+binaries and `.deb` packages are attached to each
+[release](https://github.com/chr-fritz/climos-exporter/releases).
+
+Metrics are served at `/metrics`, plus `/live` and `/ready` for probes.
+
+### Options
+
+| Flag              | Default          | Meaning                                                |
+| ----------------- | ---------------- | ------------------------------------------------------ |
+| `-d`, `--device`  | `/dev/ttyUSB0`   | serial device the unit is connected to                 |
+| `-p`, `--port`    | `8080`           | port the metrics endpoint listens on                   |
+| `--stream-dir`    | *(off)*          | directory for raw bytestream recordings, one per day   |
+| `--log_level`     | `info`           | `trace`, `debug`, `info`, `warn`, `error`              |
+| `--log_format`    | `text`           | `text` or `json`                                       |
+| `--config`        | `~/.climos-exporter.yaml` | config file                                   |
+
+Every flag can also be set in the config file or through the environment, for
+example `EXPORTER_DEVICE=/dev/ttyUSB1`.
+
+## Metrics
+
+| Metric                                       | Register       | Meaning                                            |
+| -------------------------------------------- | -------------- | -------------------------------------------------- |
+| `climos_temperatures_indoor_in`              | `0x81`         | supply air entering the house, °C                  |
+| `climos_temperatures_outside`                | `0x82`         | outdoor air, °C                                    |
+| `climos_temperatures_indoor_out`             | `0x83`         | extract air leaving the rooms, °C                  |
+| `climos_temperatures_house_out`              | `0x84`         | exhaust air leaving the house, °C                  |
+| `climos_fan_setpoint_percent`                | `0x55`         | fan setpoint, mirrors the 0-10V control input      |
+| `climos_operating_mode`                      | `0x28`         | mode selected on the panel                         |
+| `climos_filter_remaining_seconds`            | `0x3e`         | time left until the filter change is due           |
+| `climos_filter_interval_seconds`             | `0x3a`         | configured interval between filter changes         |
+| `climos_operating_seconds{counter=…}`        | `0x26`, `0x85` | operating time, counted while powered              |
+| `climos_run_state`                           | `0x1d`         | 1 running, 0 shutting down, 3 shortly after a start |
+| `climos_status_word`                         | `0x1a`         | status word, 13 during normal operation            |
+| `climos_lifecycle_state`                     | `0x08`         | 0 before stopping, 1 then 3 while starting         |
+| `climos_error_code`                          | `0x0e`         | error code, 0 when healthy                         |
+| `climos_register{register=…}`                | all            | raw value of every numeric register                |
+| `climos_device_info{…}`                      | identity       | article numbers and device names                   |
+| `climos_bus_restarts_total`                  | —              | restarts, one per address scan                     |
+| `climos_frames_total{result=…}`              | —              | frames read, by framing result                     |
+| `climos_unknown_registers_total{register=…}` | —              | records dropped for want of a known width          |
+| `climos_last_package_timestamp_seconds`      | —              | when the last frame arrived                        |
+
+A register that has not been seen reports `NaN` rather than 0 — the
+once-a-minute registers and the ones that only appear after a restart are
+legitimately absent for a while after start.
+
+A rising `climos_unknown_registers_total` means a device reports a register
+whose width is not in the table, and the rest of that frame is lost with it.
+[`docs/protocol.md`](docs/protocol.md#preheater) explains how to work the width
+out from the next restart dump.
+
+## Recording and replaying the bus
+
+With `--stream-dir` the reader writes the raw bytestream to one file per day.
+Such a file can be run back through the current decoder:
 
 ```sh
 CLIMOS_DUMP=$PWD/dumps/2026-08-05.bin go test ./pkg/climos/ -run TestReplayDump -v
 ```
+
+It prints the frame count, how many needed repairing, how many payloads failed
+to decode and which registers appeared. That is the quickest check of a new
+firmware or a rewired bus against what the protocol notes describe.
+
+## Development
+
+```sh
+make build     # binary into build/
+make ci-check  # tests, coverage, vet and lint as CI runs them
+make generate  # regenerate the mocks
+```
+
+## License
+
+Apache License 2.0, see [LICENSE](LICENSE).
