@@ -2,14 +2,22 @@
 
 Reconstructed from twelve daily recordings of the raw bytestream (February to
 September 2026), cross-checked against `knx_Lueftung_Stellwert{type="actual"}`
-and `shelly_power_w{instance="Lüftung"}` in Prometheus, and against the
-groundwork collected in `Paul_Novus300_RS485.xlsx`.
+and `shelly_power_w{instance="Lüftung"}` in Prometheus, against the groundwork
+collected in `Paul_Novus300_RS485.xlsx`, and against the operating manual, which
+is the only manufacturer document that describes this device rather than a
+relative of it.
 
-The unit reports itself as a `CLIMOS200` running bus version 1.7.1. Its panel
-names the nodes as master `SWZ0024B32B`, fan slave `SWZ0025B27A`, TFT 1
-`ETA0036E31E` and defroster `ST00064E26E`; a post-heater and an EWT damper are
-configurable but not fitted here. Those four screens under Information are what
-several readings below are checked against.
+The unit is a PAUL CLIMOS F 200 Comfort in the R (rechts, Typ A) form: a
+cross-counterflow enthalpy exchanger, which transfers moisture along with heat,
+two volume-flow-constant fans and an integrated PTC defroster. It reports itself
+as `CLIMOS200` running bus version 1.7.1. Its panel names the nodes as master
+`SWZ0024B32B`, fan slave `SWZ0025B27A`, TFT 1 `ETA0036E31E` and defroster
+`ST00064E26E`; a post-heater and an EWT damper are configurable but not fitted
+here. Those four screens under Information are what several readings below are
+checked against.
+
+Because the exchanger moves moisture too, a recovery efficiency computed from
+temperatures alone — as it is below — is the sensible part of the recovery only.
 
 ## Contents
 
@@ -23,6 +31,7 @@ several readings below are checked against.
 - [The predecessor generation](#the-predecessor-generation)
 - [The ComfoAir protocol is a different bus](#the-comfoair-protocol-is-a-different-bus)
 - [Preheater](#preheater)
+- [Summer ventilation, and why there is no bypass register](#summer-ventilation-and-why-there-is-no-bypass-register)
 - [Writing to the bus](#writing-to-the-bus)
 - [Restarts](#restarts)
 - [What the manufacturer documents](#what-the-manufacturer-documents)
@@ -204,10 +213,10 @@ Value types:
 
 | Reg    | Width | Meaning                          |   Rate | Observed         | Confidence |
 | ------ | ----: | -------------------------------- | -----: | ---------------- | ---------- |
-| `0x81` |     2 | supply air, 0.1 °C               | 3.5 s  | 20.4 – 31.0 °C   | measured   |
-| `0x82` |     2 | outdoor air, 0.1 °C              | 3.5 s  | −1.5 – 29.4 °C   | measured   |
-| `0x83` |     2 | extract air, 0.1 °C              | 3.5 s  | 24.5 – 30.5 °C   | measured   |
-| `0x84` |     2 | exhaust air, 0.1 °C              | 3.5 s  | 5.5 – 30.7 °C    | measured   |
+| `0x81` |     2 | supply air, T2, 0.1 °C           | 3.5 s  | 20.4 – 31.0 °C   | measured   |
+| `0x82` |     2 | outdoor air, T1, 0.1 °C          | 3.5 s  | −1.5 – 29.4 °C   | measured   |
+| `0x83` |     2 | extract air, T3, 0.1 °C          | 3.5 s  | 24.5 – 30.5 °C   | measured   |
+| `0x84` |     2 | exhaust air, T4, 0.1 °C          | 3.5 s  | 5.5 – 30.7 °C    | measured   |
 | `0x55` |     2 | fan setpoint, 0.1 %              | 2.1 s  | 24.6 – 70.0 %    | measured   |
 | `0x1d` |     1 | run state                        | 0.1 s  | 0, 1, 3, 4       | inferred   |
 | `0x1a` |     1 | status word                      | 0.3 s  | 0, 1, 13         | inferred   |
@@ -223,6 +232,15 @@ Value types:
 `0x27`, `0x28` and `0x29` carry the mode codes from the `Lüfterstufen` sheet:
 1 – 3 fan stage, 4 boost, 5 away, 6 automatic. `0x27` and `0x28` move together
 and hold the mode that is running; `0x29` holds the one to fall back to.
+
+The manual says what the two special modes are, which the recordings could only
+describe from the outside. Boost runs at the air volume of fan stage 3 for a
+duration set between 15 and 120 minutes in five minute steps, and it interrupts
+the current mode rather than replacing it. Away is a humidity protection
+programme, not a low speed: it runs fan stage 1 for 15, 30 or 45 minutes of
+every hour and stops in between. Neither duration has a register in this map
+yet, and both are settable on the panel — which makes them the two easiest
+identifications left.
 
 `0x1d` reads 1 in normal operation, drops to 0 during an orderly shutdown and
 reports 3 for the first seconds after a start.
@@ -272,28 +290,62 @@ accumulated downtime.
 
 ### Settings, only in the restart dump
 
-Unchanged across all twelve recordings.
+Unchanged across all twelve recordings — and *only* in the restart dump, which
+is not a limitation of the recordings but of the bus. Of the nine daily dumps,
+three carry a restart and report all 124 registers; the other six report 15 to
+18, and every settings register is missing from them. A setting changed at the
+panel therefore does not reach the bus when it is changed. It becomes visible
+the next time the master emits its register dump, which is after a restart. Any
+attempt to identify a settings register has to be built around that:
+
+```
+climos-exporter replay <after>.bin --against <before>.bin
+```
+
+with both recordings carrying a restart.
 
 | Reg             | Value                       | Meaning                                                    |
 | --------------- | --------------------------- | ---------------------------------------------------------- |
-| `0x2d` – `0x30` | 17, 17, 47, 85              | fan stages in percent                                      |
+| `0x2d` – `0x30` | 17, 17, 47, 85              | fan stages in percent, see below                           |
 | `0x31` – `0x33` | −5, −5, −5                  | debalancing per stage                                      |
 | `0x34` – `0x39` | 17, 25, 38, 47, 56, 64      | the step ladder the sheet attributes to an LED panel       |
 | `0x3a`          | 100                         | unidentified                                               |
 | `0x4d` – `0x50` | 17, 17, 100, 100            | 0-10 V: Umin 1.7 V, n_min 17 %, Umax 10.0 V, n_max 100 %   |
 | `0x51` – `0x54` | 50, 20, 190, 80             | 4-20 mA: Imin, n_min, Imax, n_max                          |
-| `0x4a` – `0x4c` | −2.0, −3.0, −3.0 °C         | frost protection thresholds                                |
-| `0x56`, `0x60`  | 22.0 °C                     | upper bypass temperature                                   |
+| `0x4a` – `0x4c` | −2.0, −3.0, −3.0 °C         | frost protection thresholds, one per mode                  |
+| `0x56`, `0x60`  | 22.0 °C                     | t_som, the summer ventilation threshold                    |
 | `0x64` – `0x78` | 21 registers of 8 bytes     | weekly schedule                                            |
+
+The manual names three frost protection modes — *eco*, *sicher* and *Feuchte-WT*,
+each with its own threshold, the last being the standard for an enthalpy
+exchanger and the only one that applies to this device. Three modes with one
+threshold each is what `0x4a` – `0x4c` are, rather than three unrelated limits.
+At the threshold the fans are switched off for a while; on a Comfort the PTC
+defroster is energised first and the fans follow only if that is not enough.
+
+The fan stages want checking against the panel. The manual constrains them to
+20 % < LS1 < LS2 < LS3 < 100 %, and `0x2d` – `0x30` read 17, 17, 47, 85, so
+either the first value is not LS1 or the constraint is only enforced while
+editing. The Lüfterstufen screen shows all three in percent and settles it in a
+minute.
+
+The filter interval is settable from 30 to 180 days in steps of ten, which the
+160 days in `0x3d` fits. The panel also counts how far the interval has been
+exceeded, and that counter has no register here yet — `0x3f`, which holds
+11 days and appears only in the restart dump, is the obvious candidate.
 
 `0x4d` – `0x50` give the characteristic of the analog input:
 `n% = 17 + (U − 1.7) · (100 − 17) / (10 − 1.7)`, and because `83 / 8.3 = 10`
 that reduces to `n% = 10 · U`. The KNX setpoint in percent therefore lands in
 the unit one to one as the fan setpoint — which is exactly what `0x55` measures.
 
-Both endpoints are confirmed from the operator's side. Novus owners were told by
+Both endpoints are confirmed twice over. The manual describes exactly this pair
+of points — a start value p1 and an end value p2 with a straight line between
+them, over a fan speed range of 17 % to 100 % — and Novus owners were told by
 Paul's service to put the analog input into the sensor automatic mode and then
 read 1.7 V as 17 % and 10 V as 100 %, which is what these four registers hold.
+The current input has a plausibility check on top: below 3 mA for more than a
+second is a fault, cleared again above 3.5 mA for a second.
 On the predecessor the analog value was mapped internally onto seven fan stages;
 here it is not, and `0x55` follows the setpoint to the tenth of a percent. The
 input reaches nothing else either: the bypass cannot be driven from outside, and
@@ -353,9 +405,9 @@ fan speed.
 | away          |      5 |      5 |  **5** |     16 W   |
 | fan stage 2   |      2 |      2 |      2 |            |
 
-Both modes take effect, boost upward and away downward. Away is not a steady
-low speed: it runs the fan for some minutes and stops it for as many, which the
-four minutes caught above do not show. `0x27` and `0x28` carry
+Both modes take effect, boost upward and away downward. Away running stage 1 for
+part of every hour is what the four minutes caught above cannot show and the
+manual states outright. `0x27` and `0x28` carry
 the mode that is running; `0x29` follows every selection except the boost, where
 it holds at 6. That fits a field holding the mode to return to: a boost expires
 by itself, while away and a fixed fan stage last until they are changed. The same boost is in the
@@ -482,6 +534,52 @@ sum by (register) (increase(climos_unknown_registers_total[1h])) > 0
 The missing width can then be derived from the next restart dump, because the
 ids ascend there and the packet length fixes every width.
 
+## Summer ventilation, and why there is no bypass register
+
+This unit has no bypass flap. Free cooling is done differently, and the manual
+calls it *Sommerlüftung ohne Bypass*: the exhaust fan is switched off, so the
+extract air stops giving its heat to the supply air, and the exhaust fan is
+switched back on for two minutes every hour to re-read the temperatures and
+check whether the conditions still hold. The Information screen shows it as a
+status — active or inactive — where a unit with a flap would show the flap.
+
+The switching condition is written out in the manual in terms of the sensor
+numbers:
+
+```
+active when   T1 < T3   and   T1 > t_aul_min   and   T3 > t_som + H_som
+```
+
+T1 is the outdoor air and T3 the extract air, which is what fixes those two
+sensor numbers here. `t_som` is settable from 20 °C to 30 °C, `t_aul_min` from
+12 °C to 20 °C with 13 °C from the factory, and `H_som` is a hysteresis on
+`t_som`. `0x56` and `0x60` both hold 22.0 °C, which sits inside the `t_som`
+range and is read as that threshold.
+
+It has never run. Across the five summer recordings the supply side recovery
+never drops below 0.74, and it would collapse towards zero with the exhaust fan
+off:
+
+| Recording  | Outdoor, median | Extract, median | Condition held | Recovery |
+| ---------- | --------------: | --------------: | -------------: | -------: |
+| 2026-06-20 |         26.5 °C |         29.5 °C |           66 % |     0.86 |
+| 2026-07-20 |         18.5 °C |         25.5 °C |          100 % |     0.84 |
+| 2026-08-06 |         20.5 °C |         27.5 °C |           95 % |     0.86 |
+| 2026-08-21 |         18.5 °C |         27.0 °C |          100 % |     0.83 |
+| 2026-09-11 |         13.5 °C |         27.0 °C |           57 % |     0.83 |
+
+Prometheus says the same over a longer window: the condition held for 89 % of
+the last thirty days, and while it held, the supply air ran 6.5 K above the
+outdoor air on average. The function is released on the panel or it is not, and
+on this unit it evidently is not.
+
+That has one consequence for this document and one for the unit. For the
+document: no register here reports the summer ventilation state, and none can be
+found until the function runs at least once, because a state that never changes
+leaves no trace. For the unit: an enthalpy exchanger warming 17 °C outdoor air
+to 25 °C while the rooms sit at 27 °C is free cooling being thrown away, and the
+setting that would use it is a checkbox under Einstellungen.
+
 ## Writing to the bus
 
 Nothing here writes to the bus; the exporter only listens. But the recordings
@@ -603,11 +701,19 @@ diagnostics and is not approved for third parties. Everything above is
 reconstructed, and the controller boards are not even Paul's own — they come
 from KD Elektroniksysteme.
 
-One caveat the fault list makes explicit: the four temperature sensors are
-numbered T1 to T4, but which physical duct each number sits in depends on
-whether the unit is the LINKS or the RECHTS variant. The assignment in this
-document was derived from an energy balance rather than from sensor numbers, so
-it holds either way, but a register named after a sensor number would not.
+Zehnder's fault list carries a caveat that does not apply here: it says the duct
+a sensor number sits in depends on whether the unit is the LINKS or the RECHTS
+variant. That is written for the range as a whole. The CLIMOS manual names T1 as
+the outdoor air and T3 as the extract air with no reference to the form, and the
+form only mirrors which duct connection sits where. T2 and T4 are the remaining
+two by elimination, each being the far end of the air path its odd numbered
+partner starts: T1 to T2 across the supply side, T3 to T4 across the exhaust
+side. The energy balance rules out the alternative reading, which would put the
+exhaust air at 5.5 °C while the outdoor air was 21 °C.
+
+That matters for fault handling rather than for the values: a panel message
+naming *Sensor 2* points at `0x81`, and looking at `0x82` would send the search
+to the wrong sensor.
 
 ## Open points
 
@@ -642,7 +748,10 @@ it holds either way, but a register named after a sensor number would not.
   its own a few times a day, and neither the operating mode nor the fan setpoint
   moves with it.
 - **`0x3a`** = 100. It was read as the filter interval until the panel showed
-  that interval to be 160 days, which is `0x3d`. What `0x3a` counts is open.
+  that interval to be 160 days, which is `0x3d`. What `0x3a` counts is open. The
+  panel keeps one counter this document has no register for — how far the filter
+  interval has been exceeded — but `0x3f` at 11 days fits that better than 100
+  does.
 - **Bit order in the weekly schedule**, which decides whether the stage 3 hour
   runs from 08:00 to 08:30 or from 08:30 to 09:00. The fourth state, fans
   stopped, has not been seen in any recording.
@@ -656,10 +765,15 @@ it holds either way, but a register named after a sensor number would not.
   slave carries a Hall sensor, so the speed is measured inside the device, and
   on the predecessor its status byte reported whether the target speed had been
   reached.
-- **Which register carries the bypass position.** The configuration holds an
-  upper bypass temperature in `0x56` and `0x60` and the bypass control sits on
-  the fan slave, but nothing in the map says whether the flap is open. The
-  sibling protocol exports it as one byte with three states.
+- **Which register carries the summer ventilation state.** The panel shows it as
+  active or inactive, so it exists, but the function has never run here and a
+  state that never changes cannot be found in a recording. Releasing it on the
+  panel is what would make it findable.
+- **Which registers hold the boost duration and the away interval.** The manual
+  makes both concrete — 15 to 120 minutes in five minute steps for the boost,
+  15, 30 or 45 minutes per hour for away — and both are settable on the panel,
+  so a recording taken across a restart before and after a change identifies
+  them.
 - **Which register carries the defroster's state and its bus temperature.** The
   node answers every poll, but nothing it sends changes while it is idle. That
   needs a recording from a day below −2 °C; the first such day after 2026-02-21
@@ -670,9 +784,18 @@ it holds either way, but a register named after a sensor number would not.
 
 ## Sources
 
-Everything attributed above to the predecessor generation, to Paul's service or
-to other owners comes from these threads. None of them describes this unit, and
-none of them is a manufacturer document.
+The manual is the manufacturer's own and describes this device. Everything
+attributed above to the predecessor generation, to Paul's service or to other
+owners comes from the threads below it; none of those describes this unit.
+
+- **Betriebsanleitung CLIMOS F 200, Version 2.0_03/2019**, PAUL Wärmerückgewinnung
+  GmbH, 64 pages, served from Zehnder's media library as
+  [HyzMFCuC](https://zehnder.picturepark.com/v/HyzMFCuC). It is the source for the
+  sensor numbering, the summer ventilation and its switching condition, the frost
+  protection modes, the boost and away definitions, the filter interval range,
+  the analog characteristic and the constant volume flow. Its own legal notice
+  reserves republication, so it is named here rather than committed: a share link
+  can expire, and the title and version above are what finds it again.
 
 - [Neues Plugin ComfoAir (KWL Wohnraumlüftung Zehnder, Paul, Wernig)](https://knx-user-forum.de/forum/supportforen/smarthome-py/31291-neues-plugin-comfoair-kwl-wohnrauml%C3%BCftung-zehnder-paul-wernig)
   — the ComfoAir RS-232 plugin on pages 1 to 5, then from page 6 on the RS-485
