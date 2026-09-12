@@ -14,16 +14,20 @@ several readings below are checked against.
 ## Contents
 
 - [The bytestream and its defect](#the-bytestream-and-its-defect)
+- [Eleven bits per character](#eleven-bits-per-character)
 - [Frame format](#frame-format)
 - [Addresses and commands](#addresses-and-commands)
 - [Payloads are register records](#payloads-are-register-records)
 - [Register map](#register-map)
 - [How the meanings were established](#how-the-meanings-were-established)
+- [The predecessor generation](#the-predecessor-generation)
+- [The ComfoAir protocol is a different bus](#the-comfoair-protocol-is-a-different-bus)
 - [Preheater](#preheater)
 - [Writing to the bus](#writing-to-the-bus)
 - [Restarts](#restarts)
 - [What the manufacturer documents](#what-the-manufacturer-documents)
 - [Open points](#open-points)
+- [Sources](#sources)
 
 ## The bytestream and its defect
 
@@ -52,9 +56,44 @@ Frames that follow their predecessor without a gap keep their first byte. That
 is the only reason the temperatures came through at all.
 
 The cause is electrical and would be fixed by fail-safe bias on the A/B pair,
-which also removes the flood of nulls. The repair in software works either way.
-`climos_frames_total{result="repaired"}` shows how many frames it saves; as that
-share approaches zero, the line is healthy.
+which also removes the flood of nulls. The sniffers built for the predecessor
+generation used 120 Ω across A and B and 2.2 kΩ to each rail, which is the
+arrangement that holds an undriven line at mark. The repair in software works
+either way. `climos_frames_total{result="repaired"}` shows how many frames it
+saves; as that share approaches zero, the line is healthy.
+
+## Eleven bits per character
+
+The exporter reads the line as eight data bits with space parity and one stop
+bit, in [`reader.go`](../pkg/climos/reader.go). That setting is load-bearing
+rather than a detail: it makes a character eleven bits long, and the only reason
+clean frames come out at all is that the line sends eleven bit characters. 8N1
+would be ten bits and would desynchronise on the first byte.
+
+Where the eleventh bit comes from is documented for the predecessor generation.
+On a Novus 300 it was traced with a logic analyser as 9600 baud, nine data bits
+and one stop bit — the multi-processor communication mode of the Atmel
+controllers inside — and the ninth bit marks a character as an address rather
+than as data. A PC UART reads such a line by putting its parity bit where the
+ninth data bit sits, which is what space parity does; the people who did it used
+8S1 and 8M1 to select the two halves of the traffic.
+
+Whether this generation still sets that marker is open, and a single recording
+decides it, because mark parity passes exactly the characters space parity
+rejects. The answer is worth having either way: a receiver that sees the marker
+does not need the repair heuristic, since the marker *is* the frame boundary.
+
+One thing the recordings already settle: the first byte is not being lost to a
+parity error. A marked character would fail space parity, and the driver hands a
+character that fails parity over as `0x00` — so a marked first byte would be
+`0x00` every single time. It is not. Counted over 2026-09-11 it arrives as
+`0x01` in 39 % of the temperature frames, 29 % of the single register frames and
+34 % of the device answers, and those are exactly the frames that follow their
+predecessor without an idle gap; the slave poll, which always opens a cycle
+after idle time, keeps it 372 times out of 424 028. So either the marking is
+gone on this generation or the adapter drops the ninth bit without reporting it,
+and the first byte is lost to the misalignment above rather than to the marker.
+Which of the two it is, the mark parity recording answers.
 
 ## Frame format
 
@@ -101,6 +140,17 @@ unit, fan slave and defroster are ticked, the heater and the EWT damper are not.
 The address map in the `Adressen` sheet does not apply to this firmware: it
 assigns `0x0105` and `0x0106` to the defroster and the electric heater, and
 nothing answers at either address here.
+
+The address space itself is inherited. The predecessor uses the same
+`0x0100` … `0x01ff` range, with `0x0101` the master, `0x0102` the control panel
+and `0x0104` the fan slave, and its startup scan also asks every address twice.
+What moved is which device type sits where — here the panel answers at `0x0104`
+and the fan slave at `0x0108`. The six device types the panel lists are the same
+six as there: master, control unit, fan slave, defroster, heating register, EWT
+damper. Addresses belong to a type rather than being handed out freely: on the
+predecessor a device that registered as a panel at `0x0112` made the master
+expect a fan slave at `0x0114` and a defroster at `0x0115`, and report a
+defroster communication fault when neither answered.
 
 Data frames cannot be traced back to individual devices. They all go to
 `0x0100`, and which register they carry does not depend on who was polled last:
@@ -241,6 +291,15 @@ Unchanged across all twelve recordings.
 that reduces to `n% = 10 · U`. The KNX setpoint in percent therefore lands in
 the unit one to one as the fan setpoint — which is exactly what `0x55` measures.
 
+Both endpoints are confirmed from the operator's side. Novus owners were told by
+Paul's service to put the analog input into the sensor automatic mode and then
+read 1.7 V as 17 % and 10 V as 100 %, which is what these four registers hold.
+On the predecessor the analog value was mapped internally onto seven fan stages;
+here it is not, and `0x55` follows the setpoint to the tenth of a percent. The
+input reaches nothing else either: the bypass cannot be driven from outside, and
+without a control panel on the bus the unit falls back to a reduced emergency
+programme.
+
 ### Weekly schedule
 
 21 registers of 8 bytes are exactly 7 days × 24 h at 2 bits per quarter hour, as
@@ -315,13 +374,81 @@ and `0x55` for KNX: a boost driven over KNX is a short upward excursion of
 acknowledgements carrying the CRC of the frame just sent, which held for the
 handful of frames examined during a restart but falls apart at scale: across
 2026-07-20 only 4 165 of 29 491 of them match that rule, 14 %. Their payload is
-`00` plus a two byte value drawn from a small recurring set, which is what a
-fingerprint of the sending device's state looks like — and the `Befehlsbeschreibung`
+`00` plus a two byte value: 2 616 distinct values across the 33 098 answers of
+2026-09-11, but with fifteen of them covering 85 % of the traffic and `00 00`
+the most frequent. A handful of states plus a long tail is what a fingerprint of
+the sending device's state looks like — and the `Befehlsbeschreibung`
 sheet describes exactly that handshake for the older firmware, where a device
 answers a poll with "nothing changed" or "yes, my configuration changed" and the
 master then asks for it. The matches during a restart fit that too: right after
 the master pushes a configuration, the device's fingerprint is the CRC of what
 it just received. None of this is proven.
+
+## The predecessor generation
+
+`Paul_Novus300_RS485.xlsx` is not a manufacturer document. It was assembled in
+January 2016 in the knx-user-forum thread on the ComfoAir plugin, where two
+people logged a Novus 300 and a Focus 200 with an ATmega reading the bus in nine
+bit mode and published six successive versions of the sheet. That settles both
+why its structure fits and why its details do not: it describes the generation
+before this one.
+
+Its frame format is a different one:
+
+```
+<address, one nine bit character> <len> <type> <data …> <checksum>
+```
+
+The checksum is a plain XOR over every byte starting from `0xFE`, so that the
+XOR across a complete frame including its checksum is zero. This unit uses a two
+byte header, a command byte, a length byte whose bit 7 is a flag, and CRC-16
+CCITT. Nothing written for the old format reads these frames.
+
+What does carry over is the conversation. The master owns the bus and nobody
+speaks unasked. It polls each device in turn, and a device answers either with
+its standard reply or with the same reply carrying bit 7 set, which means
+"something of mine changed"; the master then asks for the changed record and the
+device sends it. Captured on a Novus 300 while a fan stage was selected on the
+panel:
+
+| Direction      | Frame                                          | Meaning                       |
+| -------------- | ---------------------------------------------- | ----------------------------- |
+| master → panel | `02 00 01 fd`                                  | poll                          |
+| panel → master | `01 02 02 02 10 ed`                            | nothing changed               |
+| panel → master | `01 02 02 82 10 6d`                            | something changed, bit 7 set  |
+| master → panel | `02 02 03 00 10 ed`                            | send me what changed          |
+| panel → master | `01 11 04 00 02 18 22 11 04 07 08 0f 03 01 …`  | the record, `03` is the stage |
+
+That is the handshake the `Befehlsbeschreibung` sheet describes and the one the
+`0x87` answers here are suspected to be, now with a byte level capture behind
+it. Bit 7 as a flag on a byte that otherwise carries a number is the same
+convention this unit's length byte uses.
+
+The same thread pins down what the fan slave is. The four NTC temperature
+sensors, a Hall sensor, the motor control and the bypass control all hang on it,
+and its status byte carried bits for whether the fans run, whether the target
+speed is reached and, probably, whether the bypass is open. None of it reached
+the bus as a number there: the slave answered polls and sent no temperatures at
+all, which is why that thread ended without them. This unit publishes all four,
+so the newer master asks for more than the old one did.
+
+## The ComfoAir protocol is a different bus
+
+Zehnder's ComfoAir units — and the Paul Santos and Wernig G90 that are the same
+machine — speak a documented RS-232 protocol with working implementations for
+FHEM, smarthome.py and the Wiregate. It is not this protocol and it does not
+reach this unit. There a frame is `07 f0 <command, two bytes> <len> <data …>
+<checksum> 07 0f`, acknowledged with `07 f3`, the checksum is the byte sum plus
+173 modulo 256, a `0x07` inside the data is doubled, and a temperature is stored
+as `(°C + 20) × 2`. The author of the smarthome.py plugin states plainly that
+the Novus 300 has RS-485 instead and that his plugin does not work with it.
+
+Its command table is still worth reading as a list of what a unit of this family
+exposes, because several of those values have no register here yet: the bypass
+position as one byte with three states — open, closed, stopped — along with its
+summer mode, factor and correction; separate supply and extract percentages per
+fan stage; the preheater state; and a comfort temperature settable from 12 °C to
+28 °C.
 
 ## Preheater
 
@@ -384,6 +511,22 @@ afterwards. Against that stands the unresolved `0x87` answer above: there is a
 device to master channel here that is not understood, and the panel may well be
 using it, in which case the master owns `0x0100` and an injected frame would be
 ignored or overwritten on the next cycle.
+
+The predecessor generation was tried and supplies the failure modes.
+Transmitting works: an Arduino answered the startup scan at `0x0103`, was
+accepted and received the master's complete register push. Being accepted turned
+out not to be enough — after the configuration the master never polled it again.
+Registering at `0x0113` was worse: the master went on to configure `0x0112`, got
+no answer, and all traffic on the bus stopped. What did work there was a man in
+the middle, an AVR relaying every frame between master and panel, setting the
+change flag in the panel's answer and editing the fan stage in the record that
+followed. Two people independently concluded that the old bus cannot be driven
+from outside at all.
+
+This unit is not that generation — the mode frames above are real writes to
+`0x0100` captured from the panel, a mechanism the old bus did not have — so the
+verdict does not transfer. The failure mode does: a wrong answer at the wrong
+address takes the whole bus down, not just the injected frame.
 
 Three practical obstacles regardless of that:
 
@@ -453,6 +596,13 @@ API serves them:
   is the section those sit in, seventeen articles including one per fault and one
   on resetting the filter runtime.
 
+What the manufacturer does not document is this bus. Paul's service declined to
+release the protocol to the people who asked for it, and a Loxone support ticket
+came back with the statement that the RS-485 interface serves internal
+diagnostics and is not approved for third parties. Everything above is
+reconstructed, and the controller boards are not even Paul's own — they come
+from KD Elektroniksysteme.
+
 One caveat the fault list makes explicit: the four temperature sensors are
 numbered T1 to T4, but which physical duct each number sits in depends on
 whether the unit is the LINKS or the RECHTS variant. The assignment in this
@@ -474,9 +624,20 @@ it holds either way, but a register named after a sensor number would not.
   The climb also settles how the byte is read. It passes 127 and 128 without a
   break, so the register is unsigned; sign extension would turn that step into a
   jump from 127 to −128.
-- **What the `0x87` answers carry.** A two byte value from a small recurring
-  set, matching the CRC of the preceding frame in 14 % of cases and unexplained
-  in the rest.
+
+  One candidate comes out of what these units do that their competitors do not:
+  they hold the set air volume constant as the filters load, which the passive
+  house certificate for the Novus 450 lists as automatic volume flow balance and
+  the comparable Zehnder does not have. A controller doing that carries an
+  estimate of the resistance it is working against, and such an estimate settles
+  after a start, stays put over a day, drifts with the season and ignores the
+  setpoint, because it describes the duct rather than the demand. That fits
+  every observation above except one: a resistance estimate should creep as the
+  filter loads, and `0x44` is exactly constant within a day.
+- **What the `0x87` answers carry.** A two byte value, fifteen of which cover
+  85 % of the answers with a tail of 2 600 more, matching the CRC of the
+  preceding frame in 14 % of cases and unexplained in the rest. The predecessor's
+  poll and change handshake is the best fit so far.
 - **What `0x08` marks.** Beyond a start and a controlled shutdown it fires on
   its own a few times a day, and neither the operating mode nor the fan setpoint
   moves with it.
@@ -491,7 +652,14 @@ it holds either way, but a register named after a sensor number would not.
   pattern means which state, and in which order the slots run.
 - **Which register reports the fan's actual output.** `0x55` is the 0-10 V input
   and stays put while a boost from the panel drives the draw from 18 W to 95 W,
-  so something must carry it, and nothing in the map moves with it.
+  so something must carry it, and nothing in the map moves with it. The fan
+  slave carries a Hall sensor, so the speed is measured inside the device, and
+  on the predecessor its status byte reported whether the target speed had been
+  reached.
+- **Which register carries the bypass position.** The configuration holds an
+  upper bypass temperature in `0x56` and `0x60` and the bypass control sits on
+  the fan slave, but nothing in the map says whether the flap is open. The
+  sibling protocol exports it as one byte with three states.
 - **Which register carries the defroster's state and its bus temperature.** The
   node answers every poll, but nothing it sends changes while it is idle. That
   needs a recording from a day below −2 °C; the first such day after 2026-02-21
@@ -499,3 +667,31 @@ it holds either way, but a register named after a sensor number would not.
 - **The read buffer in `reader.go`** grows without bound as long as no frame can
   be extracted. It does not happen in the recordings, because a unit without
   power delivers no bytes at all.
+
+## Sources
+
+Everything attributed above to the predecessor generation, to Paul's service or
+to other owners comes from these threads. None of them describes this unit, and
+none of them is a manufacturer document.
+
+- [Neues Plugin ComfoAir (KWL Wohnraumlüftung Zehnder, Paul, Wernig)](https://knx-user-forum.de/forum/supportforen/smarthome-py/31291-neues-plugin-comfoair-kwl-wohnrauml%C3%BCftung-zehnder-paul-wernig)
+  — the ComfoAir RS-232 plugin on pages 1 to 5, then from page 6 on the RS-485
+  reverse engineering of the Novus 300 and Focus 200: the nine bit framing, the
+  frame format and its XOR checksum, the poll and change handshake, the
+  registration experiments, and the six versions of `Paul_Novus300_RS485.xlsx`.
+- [Neues Modul für ComfoAir, Paul Santos und Lüftungen mit kompatibler Steuerung](https://forum.fhem.de/index.php?topic=23373.15)
+  — the FHEM side of the ComfoAir protocol, including the bypass byte and the
+  readings those units expose; it also names RS-485 as the other line.
+- [Integration KWL Paul Novus 300](https://www.loxforum.com/forum/german/software-konfiguration-programm-und-visualisierung/14821-integration-kwl-paul-novus-300)
+  — the 1.7 V to 10 V characteristic from an owner, the terminals for the analog
+  input and the external enable, and Loxone's support answer on the RS-485
+  interface.
+- [Steuerung der PAUL Wohnraumlüftung über KNX](https://knx-user-forum.de/forum/%C3%B6ffentlicher-bereich/knx-eib-forum/15749-steuerung-der-paul-wohnrauml%C3%BCftung-%C3%BCber-knx)
+  — Paul's answers on what the analog input can and cannot do, and on the
+  emergency programme without a control panel.
+- [Lüftungsanlage Paul Novus (F) 450 oder Zehnder ComfoAir 550](https://knx-user-forum.de/forum/%C3%B6ffentlicher-bereich/geb%C3%A4udetechnik-ohne-knx-eib/821295-l%C3%BCftungsanlage-paul-novus-f-450-oder-zehnder-comfoair-550)
+  — the constantflow comparison and the passive house certificates behind it.
+- [Reparatur Elektronik Paul Thermos Lüftungsgeräte](https://www.haustechnikdialog.de/Forum/t/234416/Reparatur-Elektronik-Paul-Thermos-Lueftungsgeraete)
+  — not reachable; the site answers every request with HTTP 403.
+- [Protokollbeschreibung ComfoAir](http://www.see-solutions.de/sonstiges/Protokollbeschreibung_ComfoAir.pdf)
+  — the specification the ComfoAir implementations are built from.
