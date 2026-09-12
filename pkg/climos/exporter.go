@@ -71,7 +71,7 @@ var gaugeSpecs = []gaugeSpec{
 	{RegOperatingTimeFan, "", "operating_seconds", "Operating time as the panel counts it.", prometheus.Labels{"counter": "fan"}, durationSeconds},
 	{RegOperatingMode, "", "operating_mode", "Operating mode selected on the panel: 1-3 fan stage, 4 boost, 5 away, 6 automatic.", nil, plainNumber},
 	{RegRunState, "", "run_state", "Run state: 1 running, 0 shutting down, 3 shortly after a start.", nil, plainNumber},
-	{RegStatusWord, "", "status_word", "Status word, 13 during normal operation.", nil, plainNumber},
+	{RegStatusWord, "", "status_word", "Status word: 13 while the air runs through the exchanger, 37 while the summer ventilation bypasses it.", nil, plainNumber},
 	{RegLifecycle, "", "lifecycle_state", "Event register: 0 right before a controlled shutdown, 1 and 3 at a start, 1 also on its own during normal operation.", nil, plainNumber},
 	{RegError, "", "error_code", "Error code reported by the unit, 0 when healthy.", nil, plainNumber},
 }

@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func Test_decodeRegisters(t *testing.T) {
@@ -202,4 +203,19 @@ func TestRegisterWidthsCoverEveryNamedRegister(t *testing.T) {
 func TestRegisterValue_Version(t *testing.T) {
 	assert.Equal(t, "1.7.1", RegisterValue{Raw: decodeHex(t, "010701")}.Version())
 	assert.Empty(t, RegisterValue{Raw: decodeHex(t, "dc00")}.Version())
+}
+
+// TestDecodeRegistersReadsTheLateArrival covers 0x62, which appears in no
+// restart dump and so has no width from one. The frame below was recorded on
+// 2026-09-12 while a setting was changed on the panel, and it pins the width
+// down: 0x2e is one byte, which leaves exactly one for 0x62.
+func TestDecodeRegistersReadsTheLateArrival(t *testing.T) {
+	values, err := decodeRegisters([]byte{0x2e, 0x00, 0x12, 0x62, 0x00, 0x0b})
+
+	require.NoError(t, err)
+	require.Len(t, values, 2)
+	assert.Equal(t, Register(0x2e), values[0].Register)
+	assert.Equal(t, uint64(18), values[0].Uint())
+	assert.Equal(t, Register(0x62), values[1].Register)
+	assert.Equal(t, uint64(11), values[1].Uint())
 }

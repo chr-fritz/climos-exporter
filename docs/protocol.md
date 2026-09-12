@@ -222,6 +222,7 @@ Value types:
 | `0x1a` |     1 | status word                      | 0.3 s  | 0, 1, 13         | inferred   |
 | `0x08` |     1 | event register, see below        | event  | 0, 1, 3          | open       |
 | `0x0e` |     1 | error code, never ≠ 0 in 12 days | 0.25 s | 0                | inferred   |
+| `0x62` |     1 | fires when a setting is changed  | event  | 0, 11, 12        | open       |
 | `0x27` |     1 | operating mode running, on change | event | 4, 5, 6          | measured   |
 | `0x28` |     1 | operating mode running, on change | event | 4, 5, 6          | measured   |
 | `0x29` |     1 | operating mode to fall back to    | event | 5, 6             | measured   |
@@ -238,12 +239,24 @@ describe from the outside. Boost runs at the air volume of fan stage 3 for a
 duration set between 15 and 120 minutes in five minute steps, and it interrupts
 the current mode rather than replacing it. Away is a humidity protection
 programme, not a low speed: it runs fan stage 1 for 15, 30 or 45 minutes of
-every hour and stops in between. Neither duration has a register in this map
-yet, and both are settable on the panel — which makes them the two easiest
-identifications left.
+every hour and stops in between. Both durations are on the bus: `0x3b` holds the
+boost duration and `0x3c` the away interval. The 30 minutes `0x3c` held until
+2026-09-12 is why away looked like equal spells of running and standing still.
 
 `0x1d` reads 1 in normal operation, drops to 0 during an orderly shutdown and
 reports 3 for the first seconds after a start.
+
+`0x1a` read 13 through all twelve recordings and now reads 37, which is bit 3
+giving way to bit 5 at the moment the summer ventilation started. During the
+switch it passed through 45, which is both bits at once. Bit 3 and bit 5 read as
+the two ways the unit can move air: through the exchanger, or past it with the
+exhaust fan stopped.
+
+`0x62` had never appeared in twelve days of recordings. It arrived on
+2026-09-12 in the same second that a fan stage was changed on the panel, took 11
+and later 12, and fell back to 0 both times. It is not in the restart dump, so
+its width comes from the frame that carried it behind `0x2e`: one byte. What the
+value counts is open — an index of which setting changed is the obvious guess.
 
 `0x08` was read here as a start and shutdown marker, which is too narrow. It
 does report 0 immediately before a controlled shutdown and then 1 and 3 while
@@ -306,14 +319,20 @@ with both recordings carrying a restart.
 
 | Reg             | Value                       | Meaning                                                    |
 | --------------- | --------------------------- | ---------------------------------------------------------- |
-| `0x2d` – `0x30` | 17, 17, 47, 85              | fan stages in percent, see below                           |
+| `0x1b`          | bit field                   | feature releases, bit 7 frees the summer ventilation        |
+| `0x2d` – `0x30` | 17, 18, 47, 85              | `0x2e` – `0x30` are fan stages 1 to 3 in percent            |
 | `0x31` – `0x33` | −5, −5, −5                  | debalancing per stage                                      |
+| `0x3b`          | 35 min                      | boost duration                                             |
+| `0x3c`          | 45 min/h                    | away interval, minutes of stage 1 per hour                 |
+| `0x41`          | 24.0 °C                     | t_som, summer ventilation threshold                        |
+| `0x43`          | 1.0 K                       | H_som, hysteresis on t_som                                 |
+| `0x49`          | 13.0 °C                     | t_aul_min, below which summer ventilation stays off        |
 | `0x34` – `0x39` | 17, 25, 38, 47, 56, 64      | the step ladder the sheet attributes to an LED panel       |
 | `0x3a`          | 100                         | unidentified                                               |
 | `0x4d` – `0x50` | 17, 17, 100, 100            | 0-10 V: Umin 1.7 V, n_min 17 %, Umax 10.0 V, n_max 100 %   |
 | `0x51` – `0x54` | 50, 20, 190, 80             | 4-20 mA: Imin, n_min, Imax, n_max                          |
 | `0x4a` – `0x4c` | −2.0, −3.0, −3.0 °C         | frost protection thresholds, one per mode                  |
-| `0x56`, `0x60`  | 22.0 °C                     | t_som, the summer ventilation threshold                    |
+| `0x56`, `0x60`  | 22.0 °C                     | unidentified                                               |
 | `0x64` – `0x78` | 21 registers of 8 bytes     | weekly schedule                                            |
 
 The manual names three frost protection modes — *eco*, *sicher* and *Feuchte-WT*,
@@ -323,11 +342,11 @@ threshold each is what `0x4a` – `0x4c` are, rather than three unrelated limits
 At the threshold the fans are switched off for a while; on a Comfort the PTC
 defroster is energised first and the fans follow only if that is not enough.
 
-The fan stages want checking against the panel. The manual constrains them to
-20 % < LS1 < LS2 < LS3 < 100 %, and `0x2d` – `0x30` read 17, 17, 47, 85, so
-either the first value is not LS1 or the constraint is only enforced while
-editing. The Lüfterstufen screen shows all three in percent and settles it in a
-minute.
+The fan stages are settled. The panel's Lüfterstufen screen shows 18 %, 47 % and
+85 %, and when stage 1 was moved from 17 % to 18 % it was `0x2e` that followed,
+so `0x2e` – `0x30` are the three stages and the `0x2d` in front of them is
+something else. The manual's constraint of 20 % < LS1 does not hold in this
+firmware, which accepts and displays 18 %.
 
 The filter interval is settable from 30 to 180 days in steps of ten, which the
 160 days in `0x3d` fits. The panel also counts how far the interval has been
@@ -421,6 +440,27 @@ For "when was boost active" the answer is therefore `0x27`/`0x28` for the panel
 and `0x55` for KNX: a boost driven over KNX is a short upward excursion of
 `0x55` while the mode stays at 6, one pressed on the panel is the mode going to
 4 while `0x55` stays put.
+
+**The settings registers** through the panel, because they reach the bus only in
+the restart dump. On 2026-09-12 six settings were changed on the panel and
+photographed, the unit was restarted, and the dump from that day was held against
+the last one carrying a restart:
+
+```
+climos-exporter replay 2026-09-12.bin --against dumps/2026-08-21.bin
+```
+
+Six registers differed and each one matched a photograph: `0x2e` 17 → 18 for fan
+stage 1, `0x3b` 30 → 35 for the boost duration, `0x3c` 30 → 45 for the away
+interval, `0x43` 5 → 10 for the summer ventilation hysteresis, and `0x1b` and
+`0x1a` for the summer ventilation itself. Nothing else in the 124 registers
+moved, which is what makes the assignment tight: a changed setting and a changed
+register, with no third candidate to choose between.
+
+The photographs stay out of the repository and sit beside the checkout in
+`fotos/`, numbered in the order they were taken so that the before and after of
+each screen sit next to each other. What each one showed is written into the
+tables here, which is what a later reader can work from.
 
 **The device answers `0x87`** are *not* settled. They were recorded here as
 acknowledgements carrying the CRC of the frame just sent, which held for the
@@ -538,47 +578,46 @@ ids ascend there and the packet length fixes every width.
 
 This unit has no bypass flap. Free cooling is done differently, and the manual
 calls it *Sommerlüftung ohne Bypass*: the exhaust fan is switched off, so the
-extract air stops giving its heat to the supply air, and the exhaust fan is
-switched back on for two minutes every hour to re-read the temperatures and
-check whether the conditions still hold. The Information screen shows it as a
-status — active or inactive — where a unit with a flap would show the flap.
+extract air stops giving its heat to the supply air, and it is switched back on
+for two minutes every hour to re-read the temperatures and check whether the
+conditions still hold.
 
 The switching condition is written out in the manual in terms of the sensor
-numbers:
+numbers, and the panel holds the three parameters it needs:
 
 ```
 active when   T1 < T3   and   T1 > t_aul_min   and   T3 > t_som + H_som
 ```
 
-T1 is the outdoor air and T3 the extract air, which is what fixes those two
-sensor numbers here. `t_som` is settable from 20 °C to 30 °C, `t_aul_min` from
-12 °C to 20 °C with 13 °C from the factory, and `H_som` is a hysteresis on
-`t_som`. `0x56` and `0x60` both hold 22.0 °C, which sits inside the `t_som`
-range and is read as that threshold.
+| Parameter   | Panel    | Register | Value on the wire |
+| ----------- | -------- | -------- | ----------------- |
+| `t_som`     | 24.0 °C  | `0x41`   | 240               |
+| `H_som`     | 1.0 °C   | `0x43`   | 10                |
+| `t_aul_min` | 13.0 °C  | `0x49`   | 130               |
 
-It has never run. Across the five summer recordings the supply side recovery
-never drops below 0.74, and it would collapse towards zero with the exhaust fan
-off:
+`0x43` is certain, because it moved from 5 to 10 in the recording at the moment
+the hysteresis was changed from 0.5 °C to 1.0 °C on the panel. `0x41` and `0x49`
+are matched by value against the same screen rather than by a change, so they
+are one step weaker.
 
-| Recording  | Outdoor, median | Extract, median | Condition held | Recovery |
-| ---------- | --------------: | --------------: | -------------: | -------: |
-| 2026-06-20 |         26.5 °C |         29.5 °C |           66 % |     0.86 |
-| 2026-07-20 |         18.5 °C |         25.5 °C |          100 % |     0.84 |
-| 2026-08-06 |         20.5 °C |         27.5 °C |           95 % |     0.86 |
-| 2026-08-21 |         18.5 °C |         27.0 °C |          100 % |     0.83 |
-| 2026-09-11 |         13.5 °C |         27.0 °C |           57 % |     0.83 |
+For twelve recordings the function never ran, and the reason was not the
+threshold. The panel has two boxes: *Sommerlüftung möglich*, which was ticked all
+along because the device has no flap, and *Sommerlüftung aktiv*, which was not.
+Ticking the second one on 2026-09-12 at 19:46 turned it on, and the bus shows
+what happened:
 
-Prometheus says the same over a longer window: the condition held for 89 % of
-the last thirty days, and while it held, the supply air ran 6.5 K above the
-outdoor air on average. The function is released on the panel or it is not, and
-on this unit it evidently is not.
+- `0x1b` went from `0x0073` to `0x00f3`, which is bit 7 of its low byte. The
+  register appears only in the restart dump and holds no number, so it is read as
+  the block of feature releases with that bit freeing the summer ventilation.
+- `0x1a`, the status word, went from 13 to 37 and stayed there.
+- The supply air fell to the outdoor air. Recovery had sat between 0.80 and 0.91
+  all afternoon; within half an hour of the change it read 0.45 and then 0.10.
 
-That has one consequence for this document and one for the unit. For the
-document: no register here reports the summer ventilation state, and none can be
-found until the function runs at least once, because a state that never changes
-leaves no trace. For the unit: an enthalpy exchanger warming 17 °C outdoor air
-to 25 °C while the rooms sit at 27 °C is free cooling being thrown away, and the
-setting that would use it is a checkbox under Einstellungen.
+That last line is the one that matters, because it is measured downstream of
+every reading above: with the exhaust fan stopped, the heat exchanger no longer
+transfers anything, and the house gets outdoor air at outdoor temperature. Before
+the change the unit was warming 17 °C outdoor air to 25 °C while the rooms stood
+at 27 °C, and it did that for 89 % of the preceding thirty days.
 
 ## Writing to the bus
 
@@ -765,15 +804,16 @@ to the wrong sensor.
   slave carries a Hall sensor, so the speed is measured inside the device, and
   on the predecessor its status byte reported whether the target speed had been
   reached.
-- **Which register carries the summer ventilation state.** The panel shows it as
-  active or inactive, so it exists, but the function has never run here and a
-  state that never changes cannot be found in a recording. Releasing it on the
-  panel is what would make it findable.
-- **Which registers hold the boost duration and the away interval.** The manual
-  makes both concrete — 15 to 120 minutes in five minute steps for the boost,
-  15, 30 or 45 minutes per hour for away — and both are settable on the panel,
-  so a recording taken across a restart before and after a change identifies
-  them.
+- **What the rest of `0x1b` releases.** Bit 7 frees the summer ventilation. The
+  remaining bits of `0x0073` are unread, and the panel offers a post-heater and
+  an EWT damper that are not fitted here, which is where the others most likely
+  belong.
+- **What `0x62` counts.** It fires only when a setting is changed and took 11 and
+  12 on the one occasion recorded.
+- **`0x56` and `0x60`** both hold 22.0 °C. They were read as the bypass
+  temperature and then as the summer ventilation threshold; the panel shows that
+  threshold to be 24.0 °C in `0x41`, so both readings were wrong and what these
+  two carry is open.
 - **Which register carries the defroster's state and its bus temperature.** The
   node answers every poll, but nothing it sends changes while it is idle. That
   needs a recording from a day below −2 °C; the first such day after 2026-02-21
