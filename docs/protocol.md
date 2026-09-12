@@ -161,14 +161,15 @@ Value types:
 | `0x1a` |     1 | status word                      | 0.3 s  | 0, 1, 13         | inferred   |
 | `0x08` |     1 | start and shutdown marker        | event  | 0, 1, 3          | inferred   |
 | `0x0e` |     1 | error code, never ≠ 0 in 12 days | 0.25 s | 0                | inferred   |
+| `0x27` |     1 | operating mode, only on change   | event  | 4, 6             | measured   |
 | `0x28` |     1 | operating mode, only on change   | event  | 4, 6             | measured   |
 | `0x44` |     1 | unidentified, 136 – 141          | 3.5 s  | see below        | open       |
 | `0x25` |     1 | constant 0x36                    | 60 s   | 54               | open       |
 | `0x09` |    16 | name slot of the third node, which reports none | 60 s | `00` + 15 spaces | measured |
 
-`0x28` carries the mode codes from the `Lüfterstufen` sheet: 1 – 3 fan stage,
-4 boost, 5 away, 6 automatic. `0x27` and `0x29` run alongside it and read 6 in
-every recording.
+`0x27` and `0x28` carry the mode codes from the `Lüfterstufen` sheet: 1 – 3 fan
+stage, 4 boost, 5 away, 6 automatic. They move together. `0x29` stays at 6 even
+while the unit is boosting, so it is not the current mode.
 
 `0x1d` reads 1 in normal operation, drops to 0 during an orderly shutdown and
 reports 3 for the first seconds after a start. `0x08` reports 0 immediately
@@ -273,17 +274,22 @@ On 2026-07-09 the same happens with an excursion to 45.5 %, where `0x55` reads
 458. `0x44` does not move in either case, which rules it out as air volume or
 fan speed.
 
-**The operating mode `0x28`** on 2026-07-20: at 08:25:11 it reports 4, at
-08:54:19 it reports 6 again — somebody pressed boost on the panel and the unit
-fell back to automatic 29 minutes later. The fan setpoint `0x55` stayed at
-24.7 % throughout those 29 minutes, and so did the power draw. The mode selected
-on the panel therefore has no effect in this installation: the 0-10 V input
-overrides it.
+**The operating mode `0x27` and `0x28`** on 2026-07-20: at 08:25:11 both report
+4, at 08:54:19 they report 6 again — somebody pressed boost on the panel and the
+unit fell back to automatic 29 minutes later. `0x29` stayed at 6 throughout, so
+it holds something else, most likely the mode to return to.
 
-For "when was boost active" that means: `climos_operating_mode` shows what was
-selected on the panel, `climos_fan_setpoint_percent` shows what the unit
-actually did. A boost driven over KNX is a short upward excursion of `0x55`, an
-away setting a sustained low value; the mode stays at 6 throughout.
+The boost took effect: `shelly_power_w` went from 18 W to 94-97 W for exactly
+those 29 minutes, the level a 70 % setpoint over KNX produces. Repeated live on
+2026-09-12, where pressing boost took the draw from 19 W to 104 W.
+
+What does *not* move with it is `0x55`, which held 24.7 % throughout, and `0x44`,
+which held 139. So `0x55` reports the 0-10 V input and nothing else — not the
+fan's actual output — and no register in this map reports that output. For "when
+was boost active" the answer is `0x27`/`0x28` for the panel and `0x55` for KNX;
+a boost driven over KNX is a short upward excursion of `0x55` while the mode
+stays at 6, and one pressed on the panel is the mode going to 4 while `0x55`
+stays put.
 
 **The acknowledgements `0x87`** because their three payload bytes are `00` plus
 the CRC bytes of the data frame sent immediately before.
@@ -342,7 +348,9 @@ ticks down once per running minute.
 
 - **`0x44`.** Sits between 136 and 141, about two units higher in winter than in
   summer, is exactly constant within a day and does not react to the fan
-  setpoint, which rules out anything air related. After a start it climbs from
+  setpoint and not to a boost pressed on the panel either, although the fan
+  audibly and measurably ramps for that one, which rules out anything air
+  related. After a start it climbs from
   10 and decelerates as it goes: 127 after four minutes, 136 after twenty-two,
   137 only after five hours. That is a heavily filtered measurement approaching
   a value, not an actuator being driven. It is exported raw as
@@ -358,6 +366,9 @@ ticks down once per running minute.
 - **`0x64` – `0x78` as the schedule** rests on the byte count and on the split
   between weekdays and weekend. Changing one slot on the panel and taking a
   fresh recording would confirm it in a minute.
+- **Which register reports the fan's actual output.** `0x55` is the 0-10 V input
+  and stays put while a boost from the panel drives the draw from 18 W to 95 W,
+  so something must carry it, and nothing in the map moves with it.
 - **Which register carries the defroster's state and its bus temperature.** The
   node answers every poll, but nothing it sends changes while it is idle. That
   needs a recording from a day below −2 °C; the first such day after 2026-02-21
