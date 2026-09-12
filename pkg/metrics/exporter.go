@@ -16,7 +16,7 @@
 
 package metrics
 
-//go:generate mockgen -destination=fake/exporterMocks.go -package=fake -source=exporter.go
+//go:generate mockgen -destination=fake/exporterMocks.go -package=fake -source=exporter.go -copyright_file=../../hack/boilerplate.txt
 
 import (
 	"context"
