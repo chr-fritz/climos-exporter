@@ -153,11 +153,26 @@ func TestRegisterValue_DurationOnlyReadsCounters(t *testing.T) {
 }
 
 func TestRegisterValue_IsNumeric(t *testing.T) {
-	for _, width := range []int{1, 2, 3, 4} {
+	for _, width := range []int{1, 2} {
 		assert.True(t, RegisterValue{Raw: make([]byte, width)}.IsNumeric(), "width %d", width)
 	}
-	for _, width := range []int{0, counterWidth, articleWidth, nameWidth} {
+	for _, width := range []int{0, versionWidth, 4, counterWidth, articleWidth, nameWidth} {
 		assert.False(t, RegisterValue{Raw: make([]byte, width)}.IsNumeric(), "width %d", width)
+	}
+}
+
+// TestNumericRegistersAreOneOrTwoBytes is what lets IsNumeric decide on width
+// alone: every wider register in the table is a version, a stamp, a counter,
+// text or a bit field, none of which reads as a number.
+func TestNumericRegistersAreOneOrTwoBytes(t *testing.T) {
+	structured := map[Register]bool{
+		RegBusVersion: true, 0x89: true, 0x8a: true, 0x8c: true, 0x8d: true,
+	}
+	for register, width := range registerWidths {
+		if width == 3 || width == 4 {
+			assert.True(t, structured[register],
+				"register %s is %d bytes wide but not a known version or stamp", register, width)
+		}
 	}
 }
 

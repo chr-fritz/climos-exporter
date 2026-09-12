@@ -85,7 +85,7 @@ exporter:
 | `climos_status_word`                         | `0x1a`         | status word, 13 during normal operation            |
 | `climos_lifecycle_state`                     | `0x08`         | 0 before stopping, 1 then 3 while starting         |
 | `climos_error_code`                          | `0x0e`         | error code, 0 when healthy                         |
-| `climos_register{register=…}`                | all            | unsigned wire value of every numeric register      |
+| `climos_register{register=…}`                | all 1-2 byte   | unsigned wire value of every numeric register      |
 | `climos_device_info{…}`                      | identity       | bus version and the attached nodes' article numbers |
 | `climos_bus_restarts_total`                  | —              | restarts, one per address scan                     |
 | `climos_frames_total{result=…}`              | —              | frames read, by framing result                     |

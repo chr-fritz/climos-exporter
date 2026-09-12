@@ -132,12 +132,13 @@ width, everything behind it shifts.
 
 Value types:
 
-- **1 and 2 bytes** integer, little endian. The width carries no sign of its
-  own and the bus mixes both readings, so `climos_register` publishes the
-  unsigned wire value and only the registers whose sign is established — the
-  four temperatures, which go below zero every winter — are also published
-  interpreted under their own metric.
-- **3 bytes** version, printed as `1.7.1`.
+- **1 and 2 bytes** integer, little endian, and the only widths that hold a
+  number. The width carries no sign of its own and the bus mixes both readings,
+  so `climos_register` publishes the unsigned wire value and only the registers
+  whose sign is established — the four temperatures, which go below zero every
+  winter — are also published interpreted under their own metric.
+- **3 and 4 bytes** version and firmware stamps, printed as `1.7.1` and left out
+  of `climos_register`, where they would read as large nonsense integers.
 - **5 bytes** counter: minute, hour, days uint16, years. A year is exactly 365
   days, checked against the rollover between the 2026-06-20 and 2026-07-20
   recordings.

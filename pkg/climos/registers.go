@@ -150,10 +150,12 @@ func decodeRegisters(payload []byte) ([]RegisterValue, error) {
 	return values, nil
 }
 
-// IsNumeric reports whether Uint and Int carry a meaningful value. The wider
-// registers hold counters, text or bit fields instead.
+// IsNumeric reports whether Uint and Int carry a meaningful value. Every
+// register that holds a number is one or two bytes wide; three and four are the
+// version and the firmware stamps, which read as large nonsense integers, and
+// anything wider is a counter, text or a bit field.
 func (v RegisterValue) IsNumeric() bool {
-	return len(v.Raw) >= 1 && len(v.Raw) <= 4
+	return len(v.Raw) >= 1 && len(v.Raw) <= 2
 }
 
 // Uint reads the raw bytes as an unsigned little endian integer, which is the
