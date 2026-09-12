@@ -22,6 +22,7 @@ several readings below are checked against.
 - [Preheater](#preheater)
 - [Writing to the bus](#writing-to-the-bus)
 - [Restarts](#restarts)
+- [What the manufacturer documents](#what-the-manufacturer-documents)
 - [Open points](#open-points)
 
 ## The bytestream and its defect
@@ -427,6 +428,37 @@ Each recording runs from 01:59 to 01:59 and they join without a gap. Since the
 stream carries no timestamp, a recording is dated through `0x3e`: that counter
 ticks down once per running minute.
 
+## What the manufacturer documents
+
+Zehnder's help centre carries a section on the Paul units that covers a few of
+the things guessed at here. The pages sit behind Cloudflare but the help centre
+API serves them:
+
+- [Störungsübersicht](https://zehnder-systems-de.zendesk.com/hc/de/articles/4409019411345)
+  lists every fault the panel can show, for the LED unit as an LED pattern and
+  for the TFT as text: sensor faults 1 to 4, supply air too cold, outdoor air too
+  cold for longer than 30 minutes, fan 1 and fan 2 reporting no speed, bypass
+  without an end position, communication faults for the fan slave, the defroster,
+  the heater, a general one and one for the control unit, plus a numeric
+  `092` for "no communication between the master board and the TFT panel". Those
+  are the names to expect once `0x0e` ever leaves zero, and they match the
+  wording in this unit's own message log.
+- [Zeitautomatik](https://zehnder-systems-de.zendesk.com/hc/de/articles/4409557287825)
+  describes the weekly programme from the operator's side and corroborates the
+  reading of `0x64` – `0x78` independently: a quarter hour slot takes one of
+  exactly four states — fans stopped, reduced, nominal, intensive — which is two
+  bits, and the panel edits the days in the groups Mo-Fr and Sa-So, which is
+  precisely the split the registers show.
+- [Beiträge allgemein Paul](https://zehnder-systems-de.zendesk.com/hc/de/sections/15868648209821)
+  is the section those sit in, seventeen articles including one per fault and one
+  on resetting the filter runtime.
+
+One caveat the fault list makes explicit: the four temperature sensors are
+numbered T1 to T4, but which physical duct each number sits in depends on
+whether the unit is the LINKS or the RECHTS variant. The assignment in this
+document was derived from an energy balance rather than from sensor numbers, so
+it holds either way, but a register named after a sensor number would not.
+
 ## Open points
 
 - **`0x44`.** Sits between 136 and 141, about two units higher in winter than in
@@ -451,10 +483,12 @@ ticks down once per running minute.
 - **`0x3a`** = 100. It was read as the filter interval until the panel showed
   that interval to be 160 days, which is `0x3d`. What `0x3a` counts is open.
 - **Bit order in the weekly schedule**, which decides whether the stage 3 hour
-  runs from 08:00 to 08:30 or from 08:30 to 09:00.
-- **`0x64` – `0x78` as the schedule** rests on the byte count and on the split
-  between weekdays and weekend. Changing one slot on the panel and taking a
-  fresh recording would confirm it in a minute.
+  runs from 08:00 to 08:30 or from 08:30 to 09:00. The fourth state, fans
+  stopped, has not been seen in any recording.
+- **`0x64` – `0x78` as the schedule** is corroborated by the manufacturer's
+  description of the weekly programme, which has four states per quarter hour
+  and edits in the groups Mo-Fr and Sa-So. What stays open is only which bit
+  pattern means which state, and in which order the slots run.
 - **Which register reports the fan's actual output.** `0x55` is the 0-10 V input
   and stays put while a boost from the panel drives the draw from 18 W to 95 W,
   so something must carry it, and nothing in the map moves with it.
