@@ -35,7 +35,7 @@ func Test_decodeRegisters(t *testing.T) {
 		{"temperatures", "44008c8100dc0082007d008300eb0084008c00",
 			[]Register{0x44, RegTemperatureIndoorIn, RegTemperatureOutside, RegTemperatureIndoorOut, RegTemperatureHouseOut}, nil},
 		{"five byte counters", "26000804ba000144008e8500060cb90001",
-			[]Register{RegOperatingTime, 0x44, RegOperatingTimeSecond}, nil},
+			[]Register{RegOperatingTime, 0x44, RegOperatingTimeFan}, nil},
 		{"sixteen byte name", "8800c246616e20636f6e74726f6c6c657220", []Register{RegNameFanController}, nil},
 		{"unknown register", "1d00018f0000", []Register{RegRunState}, ErrUnknownRegister},
 		{"value cut short", "8100dc", nil, ErrTruncatedPayload},
@@ -118,6 +118,29 @@ func sliceOrNil(registers []Register) []Register {
 	return registers
 }
 
+// TestRegisterValue_UintKeepsTheWireValue guards the reading of register 0x44,
+// whose soft start ramps evenly from 10 to 138 and would jump from 127 to -128
+// if the byte were sign extended.
+func TestRegisterValue_UintKeepsTheWireValue(t *testing.T) {
+	tests := []struct {
+		raw  string
+		want uint64
+	}{
+		{"8a", 138},
+		{"fb", 251},
+		{"be", 190},
+		{"7f", 127},
+		{"f1ff", 65521},
+	}
+	for _, tt := range tests {
+		t.Run(tt.raw, func(t *testing.T) {
+			assert.Equal(t, tt.want, RegisterValue{Raw: decodeHex(t, tt.raw)}.Uint())
+		})
+	}
+	assert.Zero(t, RegisterValue{}.Uint())
+	assert.Zero(t, RegisterValue{Raw: make([]byte, 11)}.Uint(), "text is not a number")
+}
+
 func TestRegisterValue_IntRejectsWidthsItCannotRepresent(t *testing.T) {
 	assert.Equal(t, int64(0), RegisterValue{}.Int(), "an absent register has no number")
 	assert.Equal(t, int64(0), RegisterValue{Raw: make([]byte, 11)}.Int(), "text is not a number")
@@ -147,14 +170,21 @@ func TestUnknownRegisterError(t *testing.T) {
 
 func TestRegisterWidthsCoverEveryNamedRegister(t *testing.T) {
 	named := []Register{
-		RegLifecycle, RegArticleMaster, RegError, RegArticleFan, RegStatusWord,
-		RegArticlePanel, RegRunState, RegOperatingTime, RegOperatingMode,
+		RegBusVersion, RegLifecycle, RegArticlePanel, RegError, RegArticleFanSlave, RegStatusWord,
+		RegArticleDefroster, RegRunState, RegOperatingTime, RegOperatingMode,
 		RegFilterInterval, RegFilterRemaining, RegFanSetpoint,
 		RegTemperatureIndoorIn, RegTemperatureOutside, RegTemperatureIndoorOut,
-		RegTemperatureHouseOut, RegOperatingTimeSecond, RegNameFanController, RegNamePanel,
+		RegTemperatureHouseOut, RegOperatingTimeFan, RegNameFanController, RegNamePanel,
 	}
 	for _, register := range named {
 		_, known := registerWidths[register]
 		assert.True(t, known, "register %s is named but has no width", register)
 	}
+}
+
+// TestRegisterValue_Version covers the bus version the panel shows under
+// Information / Software-Versionen, which on this unit reads 1.7.1.
+func TestRegisterValue_Version(t *testing.T) {
+	assert.Equal(t, "1.7.1", RegisterValue{Raw: decodeHex(t, "010701")}.Version())
+	assert.Empty(t, RegisterValue{Raw: decodeHex(t, "dc00")}.Version())
 }

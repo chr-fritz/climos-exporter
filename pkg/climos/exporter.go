@@ -66,9 +66,9 @@ var gaugeSpecs = []gaugeSpec{
 	{RegTemperatureHouseOut, "temperatures", "house_out", "Exhaust air temperature leaving the house in degree celsius.", nil, RegisterValue.Tenths},
 	{RegFanSetpoint, "", "fan_setpoint_percent", "Fan setpoint in percent, mirroring the 0-10V control input.", nil, RegisterValue.Tenths},
 	{RegFilterRemaining, "", "filter_remaining_seconds", "Time left until the filter change is due.", nil, durationSeconds},
-	{RegFilterInterval, "", "filter_interval_seconds", "Configured interval between filter changes.", nil, daysAsSeconds},
-	{RegOperatingTime, "", "operating_seconds", "Operating time, counted while the unit is powered.", prometheus.Labels{"counter": "device"}, durationSeconds},
-	{RegOperatingTimeSecond, "", "operating_seconds", "Operating time, counted while the unit is powered.", prometheus.Labels{"counter": "secondary"}, durationSeconds},
+	{RegFilterInterval, "", "filter_interval_seconds", "Configured interval between filter changes.", nil, durationSeconds},
+	{RegOperatingTime, "", "operating_seconds", "Operating time as the panel counts it.", prometheus.Labels{"counter": "device"}, durationSeconds},
+	{RegOperatingTimeFan, "", "operating_seconds", "Operating time as the panel counts it.", prometheus.Labels{"counter": "fan"}, durationSeconds},
 	{RegOperatingMode, "", "operating_mode", "Operating mode selected on the panel: 1-3 fan stage, 4 boost, 5 away, 6 automatic.", nil, plainNumber},
 	{RegRunState, "", "run_state", "Run state: 1 running, 0 shutting down, 3 shortly after a start.", nil, plainNumber},
 	{RegStatusWord, "", "status_word", "Status word, 13 during normal operation.", nil, plainNumber},
@@ -76,21 +76,19 @@ var gaugeSpecs = []gaugeSpec{
 	{RegError, "", "error_code", "Error code reported by the unit, 0 when healthy.", nil, plainNumber},
 }
 
-// identityRegisters make up the label set of climos_device_info.
+// identityRegisters make up the label set of climos_device_info, in the order
+// the labels are declared. The master announces the other nodes but not itself,
+// so its own article number never reaches the bus.
 var identityRegisters = []Register{
-	RegArticleMaster, RegArticleFan, RegArticlePanel, RegNameFanController, RegNamePanel,
+	RegBusVersion, RegArticlePanel, RegArticleFanSlave, RegArticleDefroster,
 }
 
 func durationSeconds(value RegisterValue) float64 {
 	return value.Duration().Seconds()
 }
 
-func daysAsSeconds(value RegisterValue) float64 {
-	return float64(value.Int()) * 24 * 60 * 60
-}
-
 func plainNumber(value RegisterValue) float64 {
-	return float64(value.Int())
+	return float64(value.Uint())
 }
 
 type metricsExporter struct {
@@ -133,13 +131,13 @@ func NewMetricsExporter(registerer prometheus.Registerer, reader Reader) (Metric
 		registers: prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Namespace: metricNamespace,
 			Name:      "register",
-			Help:      "Raw value of every numeric register the bus reports.",
+			Help:      "Unsigned wire value of every numeric register; the registers known to be signed are also exposed interpreted under their own metric.",
 		}, []string{"register"}),
 		deviceInfo: prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Namespace: metricNamespace,
 			Name:      "device_info",
-			Help:      "Article numbers and device names, reported after a bus restart.",
-		}, []string{"article_master", "article_fan", "article_panel", "fan_controller", "panel"}),
+			Help:      "Bus version and the article numbers of the attached nodes, reported after a bus restart.",
+		}, []string{"bus_version", "panel", "fan_slave", "defroster"}),
 		lastPackage: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: metricNamespace,
 			Name:      "last_package_timestamp_seconds",
@@ -256,7 +254,7 @@ func (m *metricsExporter) store(values []RegisterValue) {
 	for _, value := range values {
 		m.values[value.Register] = value
 		if value.IsNumeric() {
-			m.registers.WithLabelValues(value.Register.String()).Set(float64(value.Int()))
+			m.registers.WithLabelValues(value.Register.String()).Set(float64(value.Uint()))
 		}
 	}
 	m.valuesMu.Unlock()
@@ -274,11 +272,11 @@ func isIdentity(value RegisterValue) bool {
 // arrives, because the parts come from different frames of the restart dump.
 func (m *metricsExporter) updateDeviceInfo() {
 	m.valuesMu.RLock()
-	labels := make([]string, 0, len(identityRegisters))
-	for _, register := range identityRegisters {
+	labels := []string{m.values[RegBusVersion].Version()}
+	for _, register := range identityRegisters[1:] {
 		labels = append(labels, m.values[register].Text())
 	}
-	_, known := m.values[RegArticleMaster]
+	_, known := m.values[RegArticlePanel]
 	m.valuesMu.RUnlock()
 
 	if !known {

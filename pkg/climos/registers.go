@@ -34,29 +34,31 @@ func (r Register) String() string {
 // The registers whose meaning is established. docs/protocol.md records how each
 // one was pinned down and lists the ones still unidentified.
 const (
+	RegBusVersion           = Register(0x00)
 	RegLifecycle            = Register(0x08)
-	RegArticleMaster        = Register(0x0d)
+	RegArticlePanel         = Register(0x0d)
 	RegError                = Register(0x0e)
-	RegArticleFan           = Register(0x19)
+	RegArticleFanSlave      = Register(0x19)
 	RegStatusWord           = Register(0x1a)
-	RegArticlePanel         = Register(0x1c)
+	RegArticleDefroster     = Register(0x1c)
 	RegRunState             = Register(0x1d)
 	RegOperatingTime        = Register(0x26)
 	RegOperatingMode        = Register(0x28)
-	RegFilterInterval       = Register(0x3a)
+	RegFilterInterval       = Register(0x3d)
 	RegFilterRemaining      = Register(0x3e)
 	RegFanSetpoint          = Register(0x55)
 	RegTemperatureIndoorIn  = Register(0x81)
 	RegTemperatureOutside   = Register(0x82)
 	RegTemperatureIndoorOut = Register(0x83)
 	RegTemperatureHouseOut  = Register(0x84)
-	RegOperatingTimeSecond  = Register(0x85)
+	RegOperatingTimeFan     = Register(0x85)
 	RegNameFanController    = Register(0x88)
 	RegNamePanel            = Register(0x8b)
 )
 
 // The widths that carry something other than a plain integer.
 const (
+	versionWidth = 3
 	counterWidth = 5
 	articleWidth = 11
 	nameWidth    = 16
@@ -148,14 +150,19 @@ func decodeRegisters(payload []byte) ([]RegisterValue, error) {
 	return values, nil
 }
 
-// IsNumeric reports whether Int carries a meaningful value. The wider registers
-// hold counters, text or bit fields instead.
+// IsNumeric reports whether Uint and Int carry a meaningful value. The wider
+// registers hold counters, text or bit fields instead.
 func (v RegisterValue) IsNumeric() bool {
 	return len(v.Raw) >= 1 && len(v.Raw) <= 4
 }
 
-// Int reads the raw bytes as a signed little endian integer.
-func (v RegisterValue) Int() int64 {
+// Uint reads the raw bytes as an unsigned little endian integer, which is the
+// value as it stands on the wire. Only a register whose sign is established
+// should be read through Int: the widths carry no sign bit of their own, and
+// the bus mixes both. Register 0x44 settles that for itself — its soft start
+// ramps evenly from 10 to 138, which is continuous unsigned and jumps from 127
+// to -128 signed.
+func (v RegisterValue) Uint() uint64 {
 	if len(v.Raw) == 0 || len(v.Raw) > 8 {
 		return 0
 	}
@@ -163,8 +170,17 @@ func (v RegisterValue) Int() int64 {
 	for i := len(v.Raw) - 1; i >= 0; i-- {
 		value = value<<8 | uint64(v.Raw[i])
 	}
+	return value
+}
+
+// Int reads the raw bytes as a signed little endian integer. Established for
+// the four temperatures, which go below zero every winter.
+func (v RegisterValue) Int() int64 {
+	if len(v.Raw) == 0 || len(v.Raw) > 8 {
+		return 0
+	}
 	shift := 64 - 8*len(v.Raw)
-	return int64(value<<shift) >> shift
+	return int64(v.Uint()<<shift) >> shift
 }
 
 // Tenths reads a register that scales by ten, which covers both the
@@ -182,6 +198,15 @@ func (v RegisterValue) Duration() time.Duration {
 	return time.Duration(days)*24*time.Hour +
 		time.Duration(v.Raw[1])*time.Hour +
 		time.Duration(v.Raw[0])*time.Minute
+}
+
+// Version reads the three byte bus version register as it is shown on the
+// panel, where 01 07 01 appears as 1.7.1.
+func (v RegisterValue) Version() string {
+	if len(v.Raw) != versionWidth {
+		return ""
+	}
+	return fmt.Sprintf("%d.%d.%d", v.Raw[0], v.Raw[1], v.Raw[2])
 }
 
 // Text reads an ASCII register. The sixteen byte names carry a device type byte

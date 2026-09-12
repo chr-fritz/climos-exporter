@@ -53,9 +53,9 @@ func TestMetricsExporterExportsUnnamedRegisters(t *testing.T) {
 	m.handlePackage(t.Context(), newPackage(decodeHex(t, "01008513d9aa44008c8100dc0082007d008300eb0084008c00"), false))
 
 	expected := `
-# HELP climos_register Raw value of every numeric register the bus reports.
+# HELP climos_register Unsigned wire value of every numeric register; the registers known to be signed are also exposed interpreted under their own metric.
 # TYPE climos_register gauge
-climos_register{register="0x44"} -116
+climos_register{register="0x44"} 140
 climos_register{register="0x81"} 220
 climos_register{register="0x82"} 125
 climos_register{register="0x83"} 235
@@ -102,9 +102,9 @@ func TestMetricsExporterBuildsDeviceInfoFromSeveralFrames(t *testing.T) {
 	m.handlePackage(t.Context(), newPackage(decodeHex(t, "01008515d82b0000010701 1c00 5354303030363445323645 1d0003"), false))
 
 	expected := `
-# HELP climos_device_info Article numbers and device names, reported after a bus restart.
+# HELP climos_device_info Bus version and the article numbers of the attached nodes, reported after a bus restart.
 # TYPE climos_device_info gauge
-climos_device_info{article_fan="",article_master="ETA0036E31E",article_panel="ST00064E26E",fan_controller="",panel=""} 1
+climos_device_info{bus_version="1.7.1",defroster="ST00064E26E",fan_slave="",panel="ETA0036E31E"} 1
 `
 	require.NoError(t, testutil.GatherAndCompare(registry, strings.NewReader(expected), "climos_device_info"))
 }
@@ -168,14 +168,15 @@ climos_unknown_registers_total{register="0x8f"} 1
 
 func TestMetricsExporterConvertsCountersToSeconds(t *testing.T) {
 	m, _ := newTestExporter(t)
-	// 0x3e counts down to the filter change, 0x3a holds the interval in days.
-	frame := decodeHex(t, "0100850a00003e00 0a0c640000 3a0064")
+	// Both are five byte counters: 0x3e counts down to the filter change and
+	// 0x3d holds the interval the panel shows as "voreingestellt".
+	frame := decodeHex(t, "0100850e00003e00 0a0c640000 3d00 0000a00000")
 	frame[4], frame[5] = crcOf(frame)
 	m.handlePackage(t.Context(), newPackage(frame, false))
 
 	assert.Equal(t, float64((100*24+12)*3600+10*60),
 		testutil.ToFloat64(m.mustCollector(t, RegFilterRemaining)))
-	assert.Equal(t, float64(100*24*3600),
+	assert.Equal(t, float64(160*24*3600),
 		testutil.ToFloat64(m.mustCollector(t, RegFilterInterval)))
 }
 
