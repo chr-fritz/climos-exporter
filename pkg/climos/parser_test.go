@@ -96,7 +96,7 @@ func TestParsePackageRejectsPackagesWithoutRegisterData(t *testing.T) {
 	}{
 		{"too short to be a package", "0100"},
 		{"keep alive poll", "010484002 87d"},
-		{"acknowledgement", "0101878398 2a00bcf6"},
+		{"device answer to the master", "0101878398 2a00bcf6"},
 		{"get set without payload", "0100850000 00"},
 	}
 	for _, tt := range tests {

@@ -20,6 +20,7 @@ several readings below are checked against.
 - [Register map](#register-map)
 - [How the meanings were established](#how-the-meanings-were-established)
 - [Preheater](#preheater)
+- [Writing to the bus](#writing-to-the-bus)
 - [Restarts](#restarts)
 - [Open points](#open-points)
 
@@ -40,7 +41,7 @@ the traffic:
 | ------------- | -------------: | ------------: | ---------: | ------------------------------ |
 | `01 00 85 13` |         16 216 |        41 626 |     39.0 % | the four temperatures          |
 | `01 00 85 03` |        295 875 |     1 419 124 |     20.8 % | a single register              |
-| `01 01 87 83` |          7 482 |        29 472 |     25.4 % | acknowledgements               |
+| `01 01 87 83` |          7 482 |        29 472 |     25.4 % | device answers to the master   |
 | `01 04 84 00` |            372 |       424 001 |      0.1 % | slave poll                     |
 | `01 00 85 20` |              0 |         1 438 |      0.0 % | filter countdown, fan setpoint |
 | `01 00 85 21` |              2 |         1 437 |      0.1 % | operating hour counters        |
@@ -74,7 +75,7 @@ share approaches zero, the line is healthy.
 | Address             | Meaning                                         | Seen                           |
 | ------------------- | ----------------------------------------------- | ------------------------------ |
 | `0x0100`            | register space, target of every data frame      | continuously                   |
-| `0x0101`            | master                                          | identity, all acknowledgements |
+| `0x0101`            | master                                          | identity, every device answer  |
 | `0x0104`            | slave                                           | ~424 000 polls/day             |
 | `0x0108`, `0x0109`  | further participants                            | ~320 000 / 350 000 per day     |
 | `0x0102` … `0x010c` | full address range, scanned twice each at start | only at a restart              |
@@ -111,7 +112,7 @@ in bulk.
 | `0x80` / `0x81` | enumeration request and answer, payload `00 00 01 07 01` plus article number         |
 | `0x84` / `0x86` | keep-alive poll and data request, never carry a payload                             |
 | `0x85`          | register data to `0x0100` — everything worth exporting                              |
-| `0x87`          | acknowledgement to the master, payload `00` plus the CRC of the frame acknowledged   |
+| `0x87`          | device answer to the master, payload `00` plus a two byte value, see below           |
 
 ## Payloads are register records
 
@@ -292,7 +293,9 @@ fan speed.
 | away          |      5 |      5 |  **5** |     16 W   |
 | fan stage 2   |      2 |      2 |      2 |            |
 
-Both modes take effect, boost upward and away downward. `0x27` and `0x28` carry
+Both modes take effect, boost upward and away downward. Away is not a steady
+low speed: it runs the fan for some minutes and stops it for as many, which the
+four minutes caught above do not show. `0x27` and `0x28` carry
 the mode that is running; `0x29` follows every selection except the boost, where
 it holds at 6. That fits a field holding the mode to return to: a boost expires
 by itself, while away and a fixed fan stage last until they are changed. The same boost is in the
@@ -307,8 +310,17 @@ and `0x55` for KNX: a boost driven over KNX is a short upward excursion of
 `0x55` while the mode stays at 6, one pressed on the panel is the mode going to
 4 while `0x55` stays put.
 
-**The acknowledgements `0x87`** because their three payload bytes are `00` plus
-the CRC bytes of the data frame sent immediately before.
+**The device answers `0x87`** are *not* settled. They were recorded here as
+acknowledgements carrying the CRC of the frame just sent, which held for the
+handful of frames examined during a restart but falls apart at scale: across
+2026-07-20 only 4 165 of 29 491 of them match that rule, 14 %. Their payload is
+`00` plus a two byte value drawn from a small recurring set, which is what a
+fingerprint of the sending device's state looks like — and the `Befehlsbeschreibung`
+sheet describes exactly that handshake for the older firmware, where a device
+answers a poll with "nothing changed" or "yes, my configuration changed" and the
+master then asks for it. The matches during a restart fit that too: right after
+the master pushes a configuration, the device's fingerprint is the CRC of what
+it just received. None of this is proven.
 
 ## Preheater
 
@@ -341,6 +353,61 @@ sum by (register) (increase(climos_unknown_registers_total[1h])) > 0
 
 The missing width can then be derived from the next restart dump, because the
 ids ascend there and the packet length fixes every width.
+
+## Writing to the bus
+
+Nothing here writes to the bus; the exporter only listens. But the recordings
+answer part of the question of whether one could, so it is written down.
+
+Changing the operating mode is a single frame to the register space. These were
+built from the CRC routine alone and then checked against the bytes captured
+while the modes were selected on the panel on 2026-09-12 — they match exactly:
+
+| Mode         | Frame                                 |
+| ------------ | ------------------------------------- |
+| fan stage 1  | `01 00 85 03 7c 1d 28 00 01`          |
+| fan stage 2  | `01 00 85 03 1f 2d 28 00 02`          |
+| fan stage 3  | `01 00 85 03 3e 3d 28 00 03`          |
+| boost        | `01 00 85 03 d9 4d 28 00 04`          |
+| away         | `01 00 85 03 f8 5d 28 00 05`          |
+| automatic    | `01 00 85 03 9b 6d 28 00 06`          |
+
+The frame carries a target address and no source, no authentication and no
+sequence number, so nothing in it distinguishes a frame of ours from one of the
+master's.
+
+What the recordings cannot answer is who is allowed to write to `0x0100`. The
+mode frame appears before the master polls the fan slave and publishes `0x27`
+and `0x29`, which reads like the panel writing and the master reconciling
+afterwards. Against that stands the unresolved `0x87` answer above: there is a
+device to master channel here that is not understood, and the panel may well be
+using it, in which case the master owns `0x0100` and an injected frame would be
+ignored or overwritten on the next cycle.
+
+Three practical obstacles regardless of that:
+
+- The adapter has to be able to transmit at all, which needs driver enable
+  control on the transceiver.
+- The first byte problem runs both ways. Sending the frame twice back to back
+  covers it, because a frame that follows another without an idle gap keeps its
+  first byte — that is exactly what the capture shows. Setting the same mode
+  twice does no harm.
+- The bus is busy. Measured over 1 373 447 gaps on 2026-09-12: the median gap is
+  zero, the 75th percentile 9 idle bytes and the 95th 30. One frame needs 10.3 ms
+  at 9600 baud with eleven bits per character, two need 20.6 ms, so a frame fits
+  into 27.6 % of the gaps and a doubled frame into 13.7 %. A sender has to wait
+  for a gap rather than transmit blind, or it collides with a poll.
+
+A staged way to find out, each step observable and reversible: transmit anything
+and check that the exporter's own receiver sees it, which tests wiring and
+timing without asking a device to act; then write the mode that is already set,
+which is a no-op if it is accepted and equally a no-op if it is not; then the
+mode that is wanted. `climos_error_code`, the panel's message log and a dip in
+`climos_frames_total` are what a collision or a rejected write would show up in.
+
+The 0-10 V input is not a substitute for the away mode. It reproduces a fan
+setpoint, and away runs the fan intermittently, so many minutes on and as many
+off; a constant setpoint cannot express that.
 
 ## Restarts
 
@@ -375,6 +442,9 @@ ticks down once per running minute.
   The climb also settles how the byte is read. It passes 127 and 128 without a
   break, so the register is unsigned; sign extension would turn that step into a
   jump from 127 to −128.
+- **What the `0x87` answers carry.** A two byte value from a small recurring
+  set, matching the CRC of the preceding frame in 14 % of cases and unexplained
+  in the rest.
 - **What `0x08` marks.** Beyond a start and a controlled shutdown it fires on
   its own a few times a day, and neither the operating mode nor the fan setpoint
   moves with it.

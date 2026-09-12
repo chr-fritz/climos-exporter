@@ -116,6 +116,14 @@ The bus section is the one to look at when something is off: a rising repaired
 share means the line is losing bytes, and a rising unknown register count means
 a device reports something this exporter cannot place.
 
+## Writing to the bus
+
+The exporter only listens and has no write path. Whether one could is worked
+through in [`docs/protocol.md`](docs/protocol.md#writing-to-the-bus): the frames
+that set each operating mode are known and verified, but who is allowed to write
+to the register space is not, and the bus is busy enough that a sender has to
+wait for a gap.
+
 ## Recording and replaying the bus
 
 With `--stream-dir` the reader writes the raw bytestream to one file per day.
