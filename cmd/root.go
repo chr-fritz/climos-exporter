@@ -19,6 +19,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/mitchellh/go-homedir"
 
@@ -69,7 +70,11 @@ func (o *RootOptions) initConfig() {
 		viper.SetConfigName(".climos-exporter")
 	}
 
-	viper.AutomaticEnv() // read in environment variables that match
+	// Without the replacer a key like exporter.device maps to an environment
+	// name containing a dot, which no shell can set, so AutomaticEnv silently
+	// never matches anything.
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	viper.AutomaticEnv()
 
 	// If a config file is found, read it in.
 	if err := viper.ReadInConfig(); err == nil {

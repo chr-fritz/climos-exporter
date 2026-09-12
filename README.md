@@ -54,8 +54,10 @@ Metrics are served at `/metrics`, plus `/live` and `/ready` for probes.
 | `--log_format`    | `text`           | `text` or `json`                                       |
 | `--config`        | `~/.climos-exporter.yaml` | config file                                   |
 
-Every flag can also come from the config file, which is read from
-`~/.climos-exporter.yaml` unless `--config` points elsewhere:
+`--device`, `--port` and `--stream-dir` can also come from the environment as
+`EXPORTER_DEVICE`, `EXPORTER_PORT` and `EXPORTER_STREAM_DIR`, or from the config
+file, which is read from `~/.climos-exporter.yaml` unless `--config` points
+elsewhere. The two logging flags take their value from the command line only.
 
 ```yaml
 exporter:
