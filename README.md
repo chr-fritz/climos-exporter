@@ -34,10 +34,12 @@ docker run --rm --device /dev/ttyUSB0 -p 8080:8080 \
   ghcr.io/chr-fritz/climos-exporter:latest run -d /dev/ttyUSB0
 ```
 
-Images are published for `linux/amd64` and `linux/arm` at
-[ghcr.io/chr-fritz/climos-exporter](https://ghcr.io/chr-fritz/climos-exporter);
-binaries and `.deb` packages are attached to each
-[release](https://github.com/chr-fritz/climos-exporter/releases).
+Container images cover `linux/amd64` and `linux/arm64` at
+[ghcr.io/chr-fritz/climos-exporter](https://ghcr.io/chr-fritz/climos-exporter).
+Every [release](https://github.com/chr-fritz/climos-exporter/releases) also
+carries static binaries for Linux on `amd64`, `arm64` and `armv7`, each with an
+SBOM. A systemd unit and its environment file sit in
+[`scripts/systemd`](scripts/systemd) for running it straight on a host.
 
 Metrics are served at `/metrics`, plus `/live` and `/ready` for probes.
 
