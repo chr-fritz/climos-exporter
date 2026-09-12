@@ -54,8 +54,16 @@ Metrics are served at `/metrics`, plus `/live` and `/ready` for probes.
 | `--log_format`    | `text`           | `text` or `json`                                       |
 | `--config`        | `~/.climos-exporter.yaml` | config file                                   |
 
-Every flag can also be set in the config file or through the environment, for
-example `EXPORTER_DEVICE=/dev/ttyUSB1`.
+Every flag can also come from the config file, which is read from
+`~/.climos-exporter.yaml` unless `--config` points elsewhere:
+
+```yaml
+exporter:
+  device: /dev/ttyUSB0
+  port: 8080
+  stream:
+    dir: /var/lib/climos-exporter
+```
 
 ## Metrics
 
