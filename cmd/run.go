@@ -30,6 +30,12 @@ const RunPortParm = "exporter.port"
 const RunDeviceParm = "exporter.device"
 const RunStreamDirParm = "exporter.stream.dir"
 
+const (
+	portFlag      = "port"
+	deviceFlag    = "device"
+	streamDirFlag = "stream-dir"
+)
+
 type RunOptions struct {
 }
 
@@ -48,21 +54,21 @@ func NewRunCommand() *cobra.Command {
 		RunE:  runOptions.run,
 	}
 
-	cmd.Flags().Uint16P("port", "p", 8080, "The port where all metrics should be exported.")
-	_ = viper.BindPFlag(RunPortParm, cmd.Flags().Lookup("port"))
-	_ = cmd.RegisterFlagCompletionFunc("port", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+	cmd.Flags().Uint16P(portFlag, "p", 8080, "The port where all metrics should be exported.")
+	_ = viper.BindPFlag(RunPortParm, cmd.Flags().Lookup(portFlag))
+	_ = cmd.RegisterFlagCompletionFunc(portFlag, func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	})
 
-	cmd.Flags().StringP("device", "d", "/dev/ttyUSB0", "The tty device where the climos ventilation system is connected")
-	_ = viper.BindPFlag(RunDeviceParm, cmd.Flags().Lookup("device"))
-	_ = cmd.RegisterFlagCompletionFunc("device", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+	cmd.Flags().StringP(deviceFlag, "d", "/dev/ttyUSB0", "The tty device where the climos ventilation system is connected")
+	_ = viper.BindPFlag(RunDeviceParm, cmd.Flags().Lookup(deviceFlag))
+	_ = cmd.RegisterFlagCompletionFunc(deviceFlag, func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		return nil, cobra.ShellCompDirectiveFilterFileExt
 	})
 
-	cmd.Flags().String("stream-dir", "", "Directory to write raw bytestream logs (optional; empty disables logging)")
-	_ = viper.BindPFlag(RunStreamDirParm, cmd.Flags().Lookup("stream-dir"))
-	_ = cmd.RegisterFlagCompletionFunc("stream-dir", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+	cmd.Flags().String(streamDirFlag, "", "Directory to write raw bytestream logs (optional; empty disables logging)")
+	_ = viper.BindPFlag(RunStreamDirParm, cmd.Flags().Lookup(streamDirFlag))
+	_ = cmd.RegisterFlagCompletionFunc(streamDirFlag, func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		return nil, cobra.ShellCompDirectiveFilterFileExt
 	})
 
