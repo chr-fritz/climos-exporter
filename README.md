@@ -4,7 +4,7 @@
 [![Quality gate](https://sonarcloud.io/api/project_badges/measure?project=chr-fritz_climos-exporter&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=chr-fritz_climos-exporter)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-Reads the internal RS-485 bus of a Zehnder ClimOS 200 heat recovery ventilation
+Reads the internal RS-485 bus of a Zehnder Climos 200 heat recovery ventilation
 unit and exposes what it carries as Prometheus metrics. The same bus is used by
 the Paul Novus 300, which shares the platform.
 
