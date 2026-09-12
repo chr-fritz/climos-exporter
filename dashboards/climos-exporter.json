@@ -1216,7 +1216,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "Register 0x26 und 0x85, so wie das Bedienteil sie unter Betriebsstunden zeigt: device zählt das Gerät, fan den Lüfter. Die Differenz ist die Zeit mit Strom, aber ohne laufenden Lüfter.",
+      "description": "Register 0x26 und 0x85, so wie das Bedienteil sie unter Betriebsstunden zeigt. Die Differenz ist die Zeit mit Strom, aber ohne laufenden Lüfter.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1333,9 +1333,10 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "climos_operating_seconds",
+          "expr": "climos_operating_seconds{counter=\"device\"}",
+          "hide": false,
           "instant": false,
-          "legendFormat": "{{counter}}",
+          "legendFormat": "Gerät",
           "range": true,
           "refId": "A"
         },
@@ -1345,11 +1346,25 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "climos_operating_seconds{counter=\"device\"} - ignoring(counter) climos_operating_seconds{counter!=\"device\"}",
+          "expr": "climos_operating_seconds{counter=\"fan\"}",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "Lüfter",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "climos_operating_seconds{counter=\"device\"} - ignoring(counter) climos_operating_seconds{counter=\"fan\"}",
+          "hide": false,
           "instant": false,
           "legendFormat": "Stillstand",
           "range": true,
-          "refId": "B"
+          "refId": "C"
         }
       ],
       "title": "Betriebsstunden",

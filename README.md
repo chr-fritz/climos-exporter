@@ -108,7 +108,9 @@ metric on one page: the air temperatures with the heat recovery ratio derived
 from them, the fan setpoint, the state registers as a timeline, both operating
 counters, the filter countdown, and a bus section with the framing results and
 the raw value of every register. Import it and pick the Prometheus data source
-when asked.
+when asked. It queries the metrics this repository produces, so a version older
+than the dashboard can leave a panel empty — `climos_operating_seconds` gained
+its `fan` counter after v0.1.0, for instance.
 
 The bus section is the one to look at when something is off: a rising repaired
 share means the line is losing bytes, and a rising unknown register count means
