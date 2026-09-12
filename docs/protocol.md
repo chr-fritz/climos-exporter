@@ -159,7 +159,7 @@ Value types:
 | `0x55` |     2 | fan setpoint, 0.1 %              | 2.1 s  | 24.6 – 70.0 %    | measured   |
 | `0x1d` |     1 | run state                        | 0.1 s  | 0, 1, 3, 4       | inferred   |
 | `0x1a` |     1 | status word                      | 0.3 s  | 0, 1, 13         | inferred   |
-| `0x08` |     1 | start and shutdown marker        | event  | 0, 1, 3          | inferred   |
+| `0x08` |     1 | event register, see below        | event  | 0, 1, 3          | open       |
 | `0x0e` |     1 | error code, never ≠ 0 in 12 days | 0.25 s | 0                | inferred   |
 | `0x27` |     1 | operating mode running, on change | event | 4, 5, 6          | measured   |
 | `0x28` |     1 | operating mode running, on change | event | 4, 5, 6          | measured   |
@@ -173,8 +173,14 @@ Value types:
 and hold the mode that is running; `0x29` holds the one to fall back to.
 
 `0x1d` reads 1 in normal operation, drops to 0 during an orderly shutdown and
-reports 3 for the first seconds after a start. `0x08` reports 0 immediately
-before stopping, then 1 and 3 while coming up.
+reports 3 for the first seconds after a start.
+
+`0x08` was read here as a start and shutdown marker, which is too narrow. It
+does report 0 immediately before a controlled shutdown and then 1 and 3 while
+coming up, but on 2026-07-20, a day with no restart at all, it reported 1 on its
+own at 10:17, at 20:17 and at 00:29, and live on 2026-09-12 it went from 3 to 1
+during steady operation. What it marks besides a start is open. The metric is
+still called `climos_lifecycle_state`, a name from the narrower reading.
 
 ### Counters, five bytes
 
@@ -284,11 +290,12 @@ fan speed.
 | automatic     |      6 |      6 |      6 |     19 W   |
 | boost         |      4 |      4 |  **6** |    103 W   |
 | away          |      5 |      5 |  **5** |     16 W   |
+| fan stage 2   |      2 |      2 |      2 |            |
 
 Both modes take effect, boost upward and away downward. `0x27` and `0x28` carry
-the mode that is running; `0x29` only follows for away and stays at 6 through a
-boost, which fits a field holding the mode to return to, since a boost expires
-by itself while away lasts until it is changed. The same boost is in the
+the mode that is running; `0x29` follows every selection except the boost, where
+it holds at 6. That fits a field holding the mode to return to: a boost expires
+by itself, while away and a fixed fan stage last until they are changed. The same boost is in the
 recordings: on 2026-07-20 `0x28` read 4 from 08:25:11 to 08:54:19 and the draw
 sat at 94 to 97 W for exactly those 29 minutes.
 
@@ -368,6 +375,9 @@ ticks down once per running minute.
   The climb also settles how the byte is read. It passes 127 and 128 without a
   break, so the register is unsigned; sign extension would turn that step into a
   jump from 127 to −128.
+- **What `0x08` marks.** Beyond a start and a controlled shutdown it fires on
+  its own a few times a day, and neither the operating mode nor the fan setpoint
+  moves with it.
 - **`0x3a`** = 100. It was read as the filter interval until the panel showed
   that interval to be 160 days, which is `0x3d`. What `0x3a` counts is open.
 - **Bit order in the weekly schedule**, which decides whether the stage 3 hour

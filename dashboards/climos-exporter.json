@@ -936,7 +936,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "Register 0x1d, 0x28, 0x1a, 0x08 und 0x0e. Die beiden letzten melden sich nur bei Ereignissen, ihre Linien bleiben daher meist leer.",
+      "description": "Register 0x1d, 0x28, 0x1a, 0x08 und 0x0e. Die beiden letzten melden sich nur bei Ereignissen, ihre Linien bleiben daher meist leer. Was 0x08 außer einem Start markiert, ist offen — es feuert auch im laufenden Betrieb.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1055,39 +1055,6 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Start/Stopp"
-            },
-            "properties": [
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "options": {
-                      "0": {
-                        "color": "orange",
-                        "index": 0,
-                        "text": "Stoppt"
-                      },
-                      "1": {
-                        "color": "blue",
-                        "index": 1,
-                        "text": "Startet"
-                      },
-                      "3": {
-                        "color": "green",
-                        "index": 2,
-                        "text": "Bereit"
-                      }
-                    },
-                    "type": "value"
-                  }
-                ]
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
               "options": "Fehlercode"
             },
             "properties": [
@@ -1178,7 +1145,7 @@
           "editorMode": "code",
           "expr": "climos_lifecycle_state",
           "instant": false,
-          "legendFormat": "Start/Stopp",
+          "legendFormat": "Ereignis 0x08",
           "range": true,
           "refId": "D"
         },
