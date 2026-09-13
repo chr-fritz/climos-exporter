@@ -130,7 +130,7 @@ func TestMetricsExporterRunStopsWithTheContext(t *testing.T) {
 func newTestExporter(t *testing.T) (*metricsExporter, *prometheus.Registry) {
 	t.Helper()
 	registry := prometheus.NewRegistry()
-	exporter, err := NewMetricsExporter(registry, NewReader("", "", ParitySpace))
+	exporter, err := NewMetricsExporter(registry, NewReader("", "", ParitySpace), "")
 	require.NoError(t, err)
 	return exporter.(*metricsExporter), registry
 }

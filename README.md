@@ -52,9 +52,34 @@ Metrics are served at `/metrics`, plus `/live` and `/ready` for probes.
 | `-p`, `--port`    | `8080`           | port the metrics endpoint listens on                   |
 | `--stream-dir`    | *(off)*          | directory for raw bytestream recordings, one per day   |
 | `--parity`        | `space`          | `space`, `mark` or `none`, see below                   |
+| `--state-file`    | *(off)*          | JSON file the register values are kept in, see below   |
 | `--log_level`     | `info`           | `trace`, `debug`, `info`, `warn`, `error`              |
 | `--log_format`    | `text`           | `text` or `json`                                       |
 | `--config`        | `~/.climos-exporter.yaml` | config file                                   |
+
+`--state-file` names a JSON file that holds the last value of every register.
+It is read at startup and written once a minute while anything has changed. A
+setting reaches the bus only when it changes or in the register dump after a bus
+restart, so without it every one of them is missing from the metrics from the
+moment the exporter restarts until the next of those happens — which can be
+weeks, and leaves gaps in a dashboard. A value that is restored is published as
+it stood; `climos_last_package_timestamp_seconds` is untouched by the restore
+and stays the answer to whether the bus is alive.
+
+The file is plain enough to read and to correct by hand:
+
+```json
+{
+  "savedAt": "2026-09-13T17:34:02+02:00",
+  "registers": {
+    "0x41": "f000",
+    "0x43": "14"
+  }
+}
+```
+
+A register whose width does not match this build is refused rather than
+published, so a file left over from an older version cannot invent a value.
 
 `--parity` selects which half of the bus traffic the receiver accepts and is an
 experiment rather than an operating mode. The line sends eleven bit characters,
@@ -67,9 +92,10 @@ arrive as `0x00`, so it answers that question and is useless for anything else.
 A recording taken at anything other than space parity is written to
 `<date>-<parity>.bin` so it never lands in the archive of ordinary recordings.
 
-`--device`, `--port`, `--stream-dir` and `--parity` can also come from the
-environment as `EXPORTER_DEVICE`, `EXPORTER_PORT`, `EXPORTER_STREAM_DIR` and
-`EXPORTER_PARITY`, or from the config file, which is read from `~/.climos-exporter.yaml` unless `--config` points
+`--device`, `--port`, `--stream-dir`, `--parity` and `--state-file` can also come
+from the environment as `EXPORTER_DEVICE`, `EXPORTER_PORT`,
+`EXPORTER_STREAM_DIR`, `EXPORTER_PARITY` and `EXPORTER_STATE_FILE`, or from the
+config file, which is read from `~/.climos-exporter.yaml` unless `--config` points
 elsewhere. The two logging flags take their value from the command line only.
 
 ```yaml
@@ -78,6 +104,8 @@ exporter:
   port: 8080
   stream:
     dir: /var/lib/climos-exporter
+  state:
+    file: /var/lib/climos-exporter/registers.json
 ```
 
 ## Metrics

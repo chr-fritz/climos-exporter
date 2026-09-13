@@ -30,12 +30,14 @@ const RunPortParm = "exporter.port"
 const RunDeviceParm = "exporter.device"
 const RunStreamDirParm = "exporter.stream.dir"
 const RunParityParm = "exporter.parity"
+const RunStateFileParm = "exporter.state.file"
 
 const (
 	portFlag      = "port"
 	deviceFlag    = "device"
 	streamDirFlag = "stream-dir"
 	parityFlag    = "parity"
+	stateFileFlag = "state-file"
 )
 
 type RunOptions struct {
@@ -74,6 +76,12 @@ func NewRunCommand() *cobra.Command {
 		return nil, cobra.ShellCompDirectiveFilterFileExt
 	})
 
+	cmd.Flags().String(stateFileFlag, "", "JSON file the last value of every register is kept in, so the ones that reach the bus only rarely survive a restart of the exporter (optional; empty disables it).")
+	_ = viper.BindPFlag(RunStateFileParm, cmd.Flags().Lookup(stateFileFlag))
+	_ = cmd.RegisterFlagCompletionFunc(stateFileFlag, func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		return []string{"json"}, cobra.ShellCompDirectiveFilterFileExt
+	})
+
 	cmd.Flags().String(parityFlag, string(climos.ParitySpace), "Which half of the bus traffic to accept. Space reads the frames; mark reads only the characters space rejects and is an experiment, not an operating mode.")
 	_ = viper.BindPFlag(RunParityParm, cmd.Flags().Lookup(parityFlag))
 	_ = cmd.RegisterFlagCompletionFunc(parityFlag, func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
@@ -104,7 +112,7 @@ func (i *RunOptions) run(cmd *cobra.Command, _ []string) error {
 }
 
 func (i *RunOptions) initAndRunMetricsExporter(ctx context.Context, exporter metrics.Exporter, reader climos.Reader) (climos.MetricsExporter, error) {
-	metricsExporter, err := climos.NewMetricsExporter(exporter, reader)
+	metricsExporter, err := climos.NewMetricsExporter(exporter, reader, viper.GetString(RunStateFileParm))
 	if err != nil {
 		return nil, err
 	}

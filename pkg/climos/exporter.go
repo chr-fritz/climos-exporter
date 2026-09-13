@@ -42,6 +42,11 @@ const (
 // closer together than this belongs to the same restart.
 const restartBurstWindow = 5 * time.Second
 
+// stateSaveInterval bounds what a kill can cost. Writing on every change would
+// mean thousands of files a day, because the setpoint alone moves sixty thousand
+// times; waiting a minute only risks a setting changed in that last minute.
+const stateSaveInterval = time.Minute
+
 type MetricsExporter interface {
 	Run(ctx context.Context)
 }
@@ -95,8 +100,10 @@ type metricsExporter struct {
 	registerer prometheus.Registerer
 	reader     Reader
 
-	valuesMu sync.RWMutex
-	values   map[Register]RegisterValue
+	valuesMu   sync.RWMutex
+	values     map[Register]RegisterValue
+	statePath  string
+	stateDirty bool
 
 	frames      *prometheus.CounterVec
 	unknown     *prometheus.CounterVec
@@ -108,11 +115,12 @@ type metricsExporter struct {
 	lastScan time.Time
 }
 
-func NewMetricsExporter(registerer prometheus.Registerer, reader Reader) (MetricsExporter, error) {
+func NewMetricsExporter(registerer prometheus.Registerer, reader Reader, statePath string) (MetricsExporter, error) {
 	m := &metricsExporter{
 		registerer: registerer,
 		reader:     reader,
 		values:     map[Register]RegisterValue{},
+		statePath:  statePath,
 		frames: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Namespace: metricNamespace,
 			Name:      "frames_total",
@@ -148,7 +156,61 @@ func NewMetricsExporter(registerer prometheus.Registerer, reader Reader) (Metric
 	if err := m.registerMetrics(); err != nil {
 		return nil, err
 	}
+	m.restoreState()
 	return m, nil
+}
+
+// restoreState publishes what the previous run last saw. The timestamp of the
+// last package is deliberately left alone: a restored value says what a register
+// held, not that the bus is alive, and climos_last_package_timestamp_seconds is
+// what tells the two apart.
+func (m *metricsExporter) restoreState() {
+	if m.statePath == "" {
+		return
+	}
+
+	values, savedAt, err := LoadRegisters(m.statePath)
+	if err != nil {
+		slog.With("file", m.statePath, "error", err).Warn("Cannot read the register state, starting without it")
+		return
+	}
+	if len(values) == 0 {
+		return
+	}
+
+	m.store(values)
+	m.valuesMu.Lock()
+	m.stateDirty = false
+	m.valuesMu.Unlock()
+
+	slog.With("file", m.statePath, "registers", len(values), "age", time.Since(savedAt).Truncate(time.Second)).
+		Info("Restored the register values of the previous run")
+}
+
+// saveState writes the values if any changed since the last write.
+func (m *metricsExporter) saveState(ctx context.Context) {
+	if m.statePath == "" {
+		return
+	}
+
+	m.valuesMu.Lock()
+	if !m.stateDirty {
+		m.valuesMu.Unlock()
+		return
+	}
+	snapshot := make(map[Register]RegisterValue, len(m.values))
+	for register, value := range m.values {
+		snapshot[register] = value
+	}
+	m.stateDirty = false
+	m.valuesMu.Unlock()
+
+	if err := SaveRegisters(m.statePath, snapshot); err != nil {
+		slog.With("file", m.statePath, "error", err).WarnContext(ctx, "Cannot write the register state")
+		m.valuesMu.Lock()
+		m.stateDirty = true
+		m.valuesMu.Unlock()
+	}
 }
 
 func (m *metricsExporter) registerMetrics() error {
@@ -196,11 +258,17 @@ func (m *metricsExporter) read(spec gaugeSpec) float64 {
 }
 
 func (m *metricsExporter) Run(ctx context.Context) {
+	ticker := time.NewTicker(stateSaveInterval)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case p := <-m.reader.PackagesChan():
 			m.handlePackage(ctx, p)
+		case <-ticker.C:
+			m.saveState(ctx)
 		case <-ctx.Done():
+			m.saveState(ctx)
 			return
 		}
 	}
@@ -257,6 +325,7 @@ func (m *metricsExporter) store(values []RegisterValue) {
 			m.registers.WithLabelValues(value.Register.String()).Set(float64(value.Uint()))
 		}
 	}
+	m.stateDirty = true
 	m.valuesMu.Unlock()
 
 	if slices.ContainsFunc(values, isIdentity) {
