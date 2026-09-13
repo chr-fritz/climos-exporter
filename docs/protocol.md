@@ -741,7 +741,19 @@ and it explains why the forum attempts failed where this might not: their
 generation had no second panel to be.
 
 Three addresses in the scan range answer nothing today, which is where such a
-device would sit.
+device would sit — but it has to be there at the right moment. The master scans
+the address range only while it starts up. On a day without a restart it polls
+`0x0104`, `0x0108`, `0x0109` and the broadcast address, and nothing else is
+touched at all, so a device that joins the bus later is never asked. It has to
+answer the startup scan to enter the rotation.
+
+Once in it, the rotation is quick. Over 2026-09-11 the panel was polled 434 152
+times, every 199 ms, the defroster every 241 ms and the fan slave every 264 ms,
+in a repeating cycle. That is also the delay between pressing something on the
+panel and the bus hearing about it, because a device speaks only when asked: up
+to one full interval before it can report at all. What follows is immediate —
+when the fan stage was changed on 2026-09-12, the master published the new value
+in the very next frame after the poll it came in on.
 
 ### What still stands in the way
 
