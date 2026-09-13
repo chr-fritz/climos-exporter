@@ -23,6 +23,7 @@ temperatures alone — as it is below — is the sensible part of the recovery o
 
 - [The bytestream and its defect](#the-bytestream-and-its-defect)
 - [Eleven bits per character](#eleven-bits-per-character)
+- [How the bus is wired](#how-the-bus-is-wired)
 - [Frame format](#frame-format)
 - [Addresses and commands](#addresses-and-commands)
 - [Payloads are register records](#payloads-are-register-records)
@@ -116,6 +117,48 @@ things destroy it: the parity error always, and the misalignment after an idle
 stretch on top. Only a receiver that reports parity per character would get the
 frame boundary for free; on this FTDI adapter the error arrives per USB packet,
 which is why a fifth of the back to back frames slip through intact.
+
+## How the bus is wired
+
+The unit carries a single RJ45 socket next to the mains inlet. A CAT5 cable runs
+from there to an *Adapterplatine*, a small board with two RJ45 sockets and a five
+pole screw terminal X1, and a shielded four core cable carries on from X1 to the
+control panel.
+
+| X1  | Core        | Signal |
+| --- | ----------- | ------ |
+| 1   | red         | 24P    |
+| 2   | white       | RX     |
+| 3   | yellow      | TX     |
+| 4   | black       | GND    |
+| 5   | aluminium   | shield |
+
+RX and TX are not two directions. They are the two halves of the differential
+pair, and an owner of the same board wired X1.2 to A+ and X1.3 to B− and read the
+bus cleanly. X1.1 carries the 24 V that powers the panel over the same cable.
+
+The exporter hangs on the second RJ45 socket of the Adapterplatine, which makes
+it a stub off a junction rather than an end of the line: the ends are the master
+at one side and the panel at the far side of the X1 cable. So it gets no
+termination, and the 120 Ω pads on the USB adapter stay unpopulated. Its RS-485
+side is galvanically isolated and controls the transmit direction by itself,
+which is worth knowing for the writing section below.
+
+The line carries no fail-safe bias. That is what the idle nulls are: of a space
+parity recording, about 44 % of all bytes are characters the receiver invents
+while nothing drives the pair, over and above the roughly 8 % that are swallowed
+frame markers. Bias could be fitted at X1, where 24 V and ground sit on the same
+terminal as the pair — a pull-up from X1.2 to X1.1 and a pull-down from X1.3 to
+X1.4. The value follows from whatever termination is already on the bus, which an
+ohmmeter across A and B reads off a dead bus: about 60 Ω means both ends are
+terminated and 2.7 kΩ resistors give 250 mV, 120 Ω means one end and wants
+5.6 kΩ, and a few kΩ means none, where 10 to 47 kΩ is plenty. None of this is
+fitted here, and it would not fix the first byte: the parity error on the marker
+survives any amount of bias.
+
+One caution the manual is explicit about: the RJ45 sockets serve the internal bus
+and nothing else, and any other use damages the control and operating modules.
+The 24 V shares those pins.
 
 ## Frame format
 
@@ -678,30 +721,57 @@ This unit is not that generation — the mode frames above are real writes to
 verdict does not transfer. The failure mode does: a wrong answer at the wrong
 address takes the whole bus down, not just the injected frame.
 
-Three practical obstacles regardless of that:
+### The route the manufacturer already provides
 
-- The adapter has to be able to transmit at all, which needs driver enable
-  control on the transceiver.
-- The first byte problem runs both ways. Sending the frame twice back to back
-  covers it, because a frame that follows another without an idle gap keeps its
-  first byte — that is exactly what the capture shows. Setting the same mode
-  twice does no harm.
+There is a way that does not depend on any of that. The manual describes
+connecting up to three control panels: they hang in parallel on the same X1
+terminal, each is given an address of its own in Setup under *Mehrere
+Bedienteile*, and every panel leaves the factory on address 1, so a second one
+has to be readdressed before it joins the bus. Two panels on the same address
+give a communication fault. And the sentence that matters: the operating mode of
+the unit follows the last command given at *any* of the connected panels.
+
+So a device that presents itself as the second or third panel is a configuration
+the unit is built for, not an intrusion into one. The master would poll it of its
+own accord, it would answer a poll with the change flag, and it would hand over
+the record when the master asks for it — the handshake the predecessor capture
+shows and the `0x87` answers are suspected to be. That is a different proposition
+from injecting a frame at `0x0100` and hoping the master does not overwrite it,
+and it explains why the forum attempts failed where this might not: their
+generation had no second panel to be.
+
+Three addresses in the scan range answer nothing today, which is where such a
+device would sit.
+
+### What still stands in the way
+
+- The first byte has to carry the marker. A frame begins with a character whose
+  ninth bit is set, which on this adapter means switching to mark parity for that
+  one byte and back to space for the rest, with the USB round trip of each switch
+  sitting in the gap. Whether the receivers tolerate that gap is untested. The
+  trick of sending a frame twice belongs to reading, not to writing: a sender
+  sets the marker itself.
 - The bus is busy. Measured over 1 373 447 gaps on 2026-09-12: the median gap is
   zero, the 75th percentile 9 idle bytes and the 95th 30. One frame needs 10.3 ms
   at 9600 baud with eleven bits per character, two need 20.6 ms, so a frame fits
   into 27.6 % of the gaps and a doubled frame into 13.7 %. A sender has to wait
   for a gap rather than transmit blind, or it collides with a poll.
 
-A staged way to find out, each step observable and reversible: transmit anything
-and check that the exporter's own receiver sees it, which tests wiring and
-timing without asking a device to act; then write the mode that is already set,
+
+A staged way to find out, each step observable and reversible: off the bus
+first, against a second adapter or a logic analyser, to see that the sequence
+really produces one character with the ninth bit set and the rest without, which
+risks nothing at all; then on the bus, write the mode that is already set,
 which is a no-op if it is accepted and equally a no-op if it is not; then the
 mode that is wanted. `climos_error_code`, the panel's message log and a dip in
 `climos_frames_total` are what a collision or a rejected write would show up in.
 
-The 0-10 V input is not a substitute for the away mode. It reproduces a fan
-setpoint, and away runs the fan intermittently, so many minutes on and as many
-off; a constant setpoint cannot express that.
+Most of what one would write for is reachable without the bus at all. The 0-10 V
+input carries the fan setpoint one to one, the unit takes any number of
+potential-free buttons for the boost, and away is a fan stage 1 running `0x3c`
+minutes of every hour, which a cycling setpoint reproduces once the interval is
+known. What stays out of reach that way is selecting an operating mode, which is
+the one thing a second control panel would be for.
 
 ## Restarts
 
@@ -846,7 +916,8 @@ owners comes from the threads below it; none of those describes this unit.
   [HyzMFCuC](https://zehnder.picturepark.com/v/HyzMFCuC). It is the source for the
   sensor numbering, the summer ventilation and its switching condition, the frost
   protection modes, the boost and away definitions, the filter interval range,
-  the analog characteristic and the constant volume flow. Its own legal notice
+  the analog characteristic, the constant volume flow, the wiring of the bus and
+  the addressing of further control panels. Its own legal notice
   reserves republication, so it is named here rather than committed: a share link
   can expire, and the title and version above are what finds it again.
 
