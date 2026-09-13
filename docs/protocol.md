@@ -87,22 +87,35 @@ than as data. A PC UART reads such a line by putting its parity bit where the
 ninth data bit sits, which is what space parity does; the people who did it used
 8S1 and 8M1 to select the two halves of the traffic.
 
-Whether this generation still sets that marker is open, and a single recording
-decides it, because mark parity passes exactly the characters space parity
-rejects. The answer is worth having either way: a receiver that sees the marker
-does not need the repair heuristic, since the marker *is* the frame boundary.
+This generation still sets that marker. Mark parity passes exactly the
+characters space parity rejects, so one recording in each mode settles it, and on
+2026-09-13 the exporter ran three minutes at mark parity. Over 54 715 bytes from
+each mode:
 
-One thing the recordings already settle: the first byte is not being lost to a
-parity error. A marked character would fail space parity, and the driver hands a
-character that fails parity over as `0x00` — so a marked first byte would be
-`0x00` every single time. It is not. Counted over 2026-09-11 it arrives as
-`0x01` in 39 % of the temperature frames, 29 % of the single register frames and
-34 % of the device answers, and those are exactly the frames that follow their
-predecessor without an idle gap; the slave poll, which always opens a cycle
-after idle time, keeps it 372 times out of 424 028. So either the marking is
-gone on this generation or the adapter drops the ninth bit without reporting it,
-and the first byte is lost to the misalignment above rather than to the marker.
-Which of the two it is, the mark parity recording answers.
+| | space | mark |
+| ---------------------- | -----: | -----: |
+| share of `0x00` bytes  | 52.0 % | 90.5 % |
+| frames recovered       |  4 569 |    409 |
+| first byte intact      |  5.3 % |  100 % |
+| first byte repaired    | 94.7 % |    0 % |
+
+The two modes are exact complements, which is what a marked character looks like:
+it passes mark parity every single time — 409 frames out of 409, not one repair —
+and fails space parity almost always. The byte the framer restores is therefore
+not a guess about an address space. It is the frame marker itself, and its eight
+data bits are `0x01`.
+
+Mark parity is no way to run the bus, because the data characters are the ones
+failing it: nine bytes in ten arrive as `0x00` and eleven times fewer frames
+survive. What it buys is the knowledge that the marker is there.
+
+The idle gap matters on top of that. Under space parity the first byte survives
+21.7 % of the time when the frame follows another one back to back, and 0.0 % of
+the time — 17 cases in 64 351 — when idle bytes came before it. So two separate
+things destroy it: the parity error always, and the misalignment after an idle
+stretch on top. Only a receiver that reports parity per character would get the
+frame boundary for free; on this FTDI adapter the error arrives per USB packet,
+which is why a fifth of the back to back frames slip through intact.
 
 ## Frame format
 

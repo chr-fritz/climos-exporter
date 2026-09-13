@@ -61,10 +61,11 @@ experiment rather than an operating mode. The line sends eleven bit characters,
 nine of them data, and the ninth marks a character as an address on this
 controller family; space parity passes the characters whose ninth bit is zero
 and is the only setting that yields whole frames. Mark parity passes exactly the
-complement, which is how a recording answers whether the marking is still there
-— and if it is, framing no longer has to be guessed. A recording taken at
-anything other than space parity is written to `<date>-<parity>.bin` so it never
-lands in the archive of ordinary recordings.
+complement. A run in each mode showed that the marking is still there: under
+mark parity every recovered frame keeps its first byte and nine bytes in ten
+arrive as `0x00`, so it answers that question and is useless for anything else.
+A recording taken at anything other than space parity is written to
+`<date>-<parity>.bin` so it never lands in the archive of ordinary recordings.
 
 `--device`, `--port`, `--stream-dir` and `--parity` can also come from the
 environment as `EXPORTER_DEVICE`, `EXPORTER_PORT`, `EXPORTER_STREAM_DIR` and
