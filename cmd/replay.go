@@ -66,11 +66,11 @@ moved most first. --changes lists the individual value changes in the order
 they happened, dropping the registers that change constantly, which is what
 makes a setting changed at the panel stand out from the temperatures.
 
---against compares two recordings. The settings registers reach the bus only in
-the register dump the master emits after a restart, so a setting changed at the
-panel becomes visible only once the unit has restarted. Comparing the recording
-from before such a session with the one from after is what identifies which
-register carries which setting.
+--against compares two recordings. A settings register reaches the bus when it
+changes and again in the register dump after a restart, and at no other time, so
+a recording holds the complete configuration only if it spans a restart.
+Comparing two such recordings is what identifies which register carries which
+setting.
 
 Times are counted from the filter countdown, the only monotone clock on the bus.
 It advances one minute per running minute and stands still while the unit is

@@ -357,21 +357,23 @@ accumulated downtime.
 | `0x89`, `0x8c` |     4 | `06 08 0a 17`           | identical on both, likely a firmware stamp |
 | `0x8a`, `0x8d` |     3 | `09 2f 0c`, `24 2e 0c`  | differs per device                         |
 
-### Settings, only in the restart dump
+### Settings
 
-Unchanged across all twelve recordings — and *only* in the restart dump, which
-is not a limitation of the recordings but of the bus. Of the nine daily dumps,
-three carry a restart and report all 124 registers; the other six report 15 to
-18, and every settings register is missing from them. A setting changed at the
-panel therefore does not reach the bus when it is changed. It becomes visible
-the next time the master emits its register dump, which is after a restart. Any
-attempt to identify a settings register has to be built around that:
+Unchanged across all twelve recordings. They reach the bus on exactly two
+occasions: the master publishes one the moment it changes, and it publishes all
+of them in the register dump after a restart. On a day with neither, not one of
+them appears — of the nine daily dumps, the three carrying a restart report all
+124 registers and the other six report 15 to 18.
+
+That decides which recording answers which question. A change is caught by any
+recording that covers the moment it was made, which is why a hysteresis set on
+the panel shows up in Prometheus straight away. Reading the *complete*
+configuration, or comparing one state against another, needs a restart dump on
+each side:
 
 ```
 climos-exporter replay <after>.bin --against <before>.bin
 ```
-
-with both recordings carrying a restart.
 
 | Reg             | Value                       | Meaning                                                    |
 | --------------- | --------------------------- | ---------------------------------------------------------- |
@@ -381,7 +383,7 @@ with both recordings carrying a restart.
 | `0x3b`          | 35 min                      | boost duration                                             |
 | `0x3c`          | 45 min/h                    | away interval, minutes of stage 1 per hour                 |
 | `0x41`          | 24.0 °C                     | t_som, summer ventilation threshold                        |
-| `0x43`          | 1.0 K                       | H_som, hysteresis on t_som                                 |
+| `0x43`          | 2.0 K                       | H_som, hysteresis on t_som                                 |
 | `0x49`          | 13.0 °C                     | t_aul_min, below which summer ventilation stays off        |
 | `0x34` – `0x39` | 17, 25, 38, 47, 56, 64      | the step ladder the sheet attributes to an LED panel       |
 | `0x3a`          | 100                         | unidentified                                               |
@@ -497,10 +499,9 @@ and `0x55` for KNX: a boost driven over KNX is a short upward excursion of
 `0x55` while the mode stays at 6, one pressed on the panel is the mode going to
 4 while `0x55` stays put.
 
-**The settings registers** through the panel, because they reach the bus only in
-the restart dump. On 2026-09-12 six settings were changed on the panel and
-photographed, the unit was restarted, and the dump from that day was held against
-the last one carrying a restart:
+**The settings registers** through the panel. On 2026-09-12 six settings were
+changed and photographed, and the dump from that day was held against the last
+one carrying a restart, which gives the full configuration on both sides:
 
 ```
 climos-exporter replay 2026-09-12.bin --against dumps/2026-08-21.bin

@@ -164,10 +164,10 @@ climos-exporter replay dumps/after.bin --against dumps/before.bin
 ```
 
 `--against` compares two recordings and reports the registers whose value
-differs. This is the one that identifies a setting: the settings registers reach
-the bus only in the register dump the master emits after a restart, so a change
-made on the panel becomes visible once the unit has restarted, and both
-recordings have to carry a restart for the comparison to see anything.
+differs. This is the one that identifies a setting. A settings register reaches
+the bus when it changes and again in the register dump after a restart, so only
+a recording spanning a restart holds the complete configuration — both sides of
+the comparison need one.
 
 `--register 0x44,0x55` restricts any of the three to named registers.
 
