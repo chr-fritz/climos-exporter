@@ -14,8 +14,11 @@ jobs:
   build:
     permissions:
       contents: read  # for actions/checkout to fetch code
-      pull-requests: read  # for SonarSource/sonarcloud-github-action to determine which PR to decorate
+      pull-requests: read  # for SonarSource/sonarqube-scan-action to determine which PR to decorate
     runs-on: ubuntu-latest
+    env:
+      # A step's own env is not visible to its if, so the token is lifted here to skip the scan where it is absent.
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -37,11 +40,8 @@ jobs:
         run: make ci-check
 
       - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@ffc3010689be73b8e5ae0c57ce35968afd7909e8 # v5.0.0
-        if: (github.event_name != 'pull_request' && env.SONAR_TOKEN != '')
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
+        if: env.SONAR_TOKEN != ''
 
   golangci:
     name: lint
