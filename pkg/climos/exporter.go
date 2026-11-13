@@ -79,6 +79,7 @@ var gaugeSpecs = []gaugeSpec{
 	{RegStatusWord, "", "status_word", "Status word: 13 while the air runs through the exchanger, 37 while the summer ventilation bypasses it.", nil, plainNumber},
 	{RegLifecycle, "", "lifecycle_state", "Event register: 0 right before a controlled shutdown, 1 and 3 at a start, 1 also on its own during normal operation.", nil, plainNumber},
 	{RegError, "", "error_code", "Error code reported by the unit, 0 when healthy.", nil, plainNumber},
+	{RegMessage, "", "message_code", "First byte of the panel's message register: 0 without a message, 65 ('A') while the panel asks for a filter change.", nil, firstByte},
 }
 
 // identityRegisters make up the label set of climos_device_info, in the order
@@ -94,6 +95,15 @@ func durationSeconds(value RegisterValue) float64 {
 
 func plainNumber(value RegisterValue) float64 {
 	return float64(value.Uint())
+}
+
+// firstByte reads the message register, whose remaining fifteen bytes have only
+// ever held spaces.
+func firstByte(value RegisterValue) float64 {
+	if len(value.Raw) == 0 {
+		return 0
+	}
+	return float64(value.Raw[0])
 }
 
 type metricsExporter struct {

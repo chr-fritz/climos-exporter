@@ -118,13 +118,14 @@ exporter:
 | `climos_temperatures_house_out`              | `0x84`         | exhaust air leaving the house, °C                  |
 | `climos_fan_setpoint_percent`                | `0x55`         | fan setpoint, mirrors the 0-10V control input      |
 | `climos_operating_mode`                      | `0x28`         | mode selected on the panel                         |
-| `climos_filter_remaining_seconds`            | `0x3e`         | time left until the filter change is due           |
+| `climos_filter_remaining_seconds`            | `0x3e`         | time left until the countdown runs out; the panel asks for the change a day earlier |
 | `climos_filter_interval_seconds`             | `0x3d`         | configured interval between filter changes         |
 | `climos_operating_seconds{counter=…}`        | `0x26`, `0x85` | operating time, total and fan, as the panel counts it |
 | `climos_run_state`                           | `0x1d`         | 1 running, 0 shutting down, 3 shortly after a start |
 | `climos_status_word`                         | `0x1a`         | status word, 13 during normal operation            |
 | `climos_lifecycle_state`                     | `0x08`         | 0 before stopping, 1 then 3 while starting         |
 | `climos_error_code`                          | `0x0e`         | error code, 0 when healthy                         |
+| `climos_message_code`                        | `0x09`         | panel message, 65 (`A`) while a filter change is due |
 | `climos_register{register=…}`                | all 1-2 byte   | unsigned wire value of every numeric register      |
 | `climos_device_info{…}`                      | identity       | bus version and the attached nodes' article numbers |
 | `climos_bus_restarts_total`                  | —              | restarts, one per address scan                     |

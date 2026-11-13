@@ -197,8 +197,9 @@ address to a device:
 | `0x0109` | `ST00064E26E` | defroster                 |
 
 The bus names two of them in full — `0x88` reads `Fan controller` and `0x8b`
-reads `Touch TFT 1`, which is the panel's own wording for `ETA0036E31E` — while
-`0x09` stays empty for the third. The master itself is `SWZ0024B32B` and never
+reads `Touch TFT 1`, which is the panel's own wording for `ETA0036E31E` — but
+the third has no name on the bus: `0x09`, which looks like a third name slot,
+carries the panel's message instead, see the live values. The master itself is `SWZ0024B32B` and never
 appears on the bus: it announces the others but not itself. The remaining addresses are asked twice and stay
 silent, which matches the panel's list of attached devices — master, control
 unit, fan slave and defroster are ticked, the heater and the EWT damper are not.
@@ -284,7 +285,13 @@ Value types:
 | `0x29` |     1 | operating mode to fall back to    | event | 5, 6             | measured   |
 | `0x44` |     1 | unidentified, 136 – 141          | 3.5 s  | see below        | open       |
 | `0x25` |     1 | constant 0x36                    | 60 s   | 54               | open       |
-| `0x09` |    16 | name slot of the third node, which reports none | 60 s | `00` + 15 spaces | measured |
+| `0x09` |    16 | panel message, see below         | 60 s   | `00`, `41` + 15 spaces | inferred |
+
+`0x09` went from `00` to `41` (`A`) on 2026-11-13 at 10:46, in the same minute
+the day field of the filter countdown reached zero, and the panel's
+Aktuelle Meldung screen read *Filter wechseln* an hour later. The fifteen bytes
+behind it stayed spaces. Whether `41` is a character or a bit field, and which
+other messages it carries, takes a second message to tell.
 
 `0x27`, `0x28` and `0x29` carry the mode codes from the `Lüfterstufen` sheet:
 1 – 3 fan stage, 4 boost, 5 away, 6 automatic. `0x27` and `0x28` move together
@@ -343,6 +350,12 @@ The Filterlaufzeit screen does the same for the filter: 160 days configured,
 here and is wrong — `0x3a` is unidentified again. Both operating counters run
 only while the unit has power, so their distance from wall clock time is
 accumulated downtime.
+
+The panel drops the hours of the countdown: it shows the day field only, and it
+asks for the filter change as soon as that field is zero — on 2026-11-13 at
+10:46, with 23:59 still left in `0x3e` and `0x09` raising the message.
+`climos_filter_remaining_seconds` therefore reaches zero about a day after the
+panel's request. What `0x3e` does once it runs out is open.
 
 ### Identity, only during the startup scan
 
@@ -882,6 +895,9 @@ to the wrong sensor.
 - **What `0x08` marks.** Beyond a start and a controlled shutdown it fires on
   its own a few times a day, and neither the operating mode nor the fan setpoint
   moves with it.
+- **The filter countdown at zero.** Whether `0x3e` stops at zero or `0x3f`
+  starts counting the overrun, and whether `0x09` returns to `00` when the
+  filter runtime is reset, waits for the days after 2026-11-13.
 - **`0x3a`** = 100. It was read as the filter interval until the panel showed
   that interval to be 160 days, which is `0x3d`. What `0x3a` counts is open. The
   panel keeps one counter this document has no register for — how far the filter

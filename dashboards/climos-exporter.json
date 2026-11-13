@@ -101,7 +101,7 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 4,
+        "w": 3,
         "x": 0,
         "y": 1
       },
@@ -204,7 +204,7 @@
       "gridPos": {
         "h": 4,
         "w": 4,
-        "x": 4,
+        "x": 3,
         "y": 1
       },
       "id": 3,
@@ -284,8 +284,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 4,
-        "x": 8,
+        "w": 3,
+        "x": 7,
         "y": 1
       },
       "id": 4,
@@ -327,6 +327,92 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
+      "description": "Register 0x09, die Meldung, die das Panel unter Aktuelle Meldung zeigt. Bisher ist nur 65 (A) bekannt: Filter wechseln, sobald der Filter-Countdown unter einen Tag fällt.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "green",
+                  "index": 0,
+                  "text": "keine"
+                },
+                "65": {
+                  "color": "orange",
+                  "index": 1,
+                  "text": "Filter wechseln"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 10,
+        "y": 1
+      },
+      "id": 8,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "climos_message_code",
+          "instant": false,
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Meldung",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
       "description": "Register 0x55, der 0-10-V-Steuereingang. Was am Bedienteil gewählt wird, steht nicht hier, sondern in der Betriebsart.",
       "fieldConfig": {
         "defaults": {
@@ -350,8 +436,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 4,
-        "x": 12,
+        "w": 3,
+        "x": 14,
         "y": 1
       },
       "id": 5,
@@ -425,7 +511,7 @@
       "gridPos": {
         "h": 4,
         "w": 4,
-        "x": 16,
+        "x": 17,
         "y": 1
       },
       "id": 6,
@@ -498,8 +584,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 4,
-        "x": 20,
+        "w": 3,
+        "x": 21,
         "y": 1
       },
       "id": 7,
@@ -1018,7 +1104,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "Register 0x1d, 0x28, 0x1a, 0x08 und 0x0e. Die beiden letzten melden sich nur bei Ereignissen, ihre Linien bleiben daher meist leer. Was 0x08 außer einem Start markiert, ist offen — es feuert auch im laufenden Betrieb.",
+      "description": "Register 0x1d, 0x28, 0x1a, 0x08, 0x0e und 0x09. 0x08 und 0x0e melden sich nur bei Ereignissen, ihre Linien bleiben daher meist leer. Was 0x08 außer einem Start markiert, ist offen — es feuert auch im laufenden Betrieb.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1189,6 +1275,34 @@
                 ]
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Meldung"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "0": {
+                        "color": "green",
+                        "index": 0,
+                        "text": "keine"
+                      },
+                      "65": {
+                        "color": "orange",
+                        "index": 1,
+                        "text": "Filter wechseln"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              }
+            ]
           }
         ]
       },
@@ -1275,6 +1389,18 @@
           "legendFormat": "Fehlercode",
           "range": true,
           "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "climos_message_code",
+          "instant": false,
+          "legendFormat": "Meldung",
+          "range": true,
+          "refId": "F"
         }
       ],
       "title": "Zustandsverlauf",

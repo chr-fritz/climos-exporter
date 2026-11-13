@@ -186,7 +186,7 @@ func TestUnknownRegisterError(t *testing.T) {
 
 func TestRegisterWidthsCoverEveryNamedRegister(t *testing.T) {
 	named := []Register{
-		RegBusVersion, RegLifecycle, RegArticlePanel, RegError, RegArticleFanSlave, RegStatusWord,
+		RegBusVersion, RegLifecycle, RegMessage, RegArticlePanel, RegError, RegArticleFanSlave, RegStatusWord,
 		RegArticleDefroster, RegRunState, RegOperatingTime, RegOperatingMode,
 		RegFilterInterval, RegFilterRemaining, RegFanSetpoint,
 		RegTemperatureIndoorIn, RegTemperatureOutside, RegTemperatureIndoorOut,

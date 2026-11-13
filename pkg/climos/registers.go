@@ -36,6 +36,7 @@ func (r Register) String() string {
 const (
 	RegBusVersion           = Register(0x00)
 	RegLifecycle            = Register(0x08)
+	RegMessage              = Register(0x09)
 	RegArticlePanel         = Register(0x0d)
 	RegError                = Register(0x0e)
 	RegArticleFanSlave      = Register(0x19)

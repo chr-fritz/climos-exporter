@@ -209,3 +209,19 @@ func TestMetricsExporterMatchesThePanel(t *testing.T) {
 	assert.Equal(t, float64(160*86400), testutil.ToFloat64(m.mustCollector(t, RegFilterInterval)))
 	assert.Equal(t, float64(62*86400), testutil.ToFloat64(m.mustCollector(t, RegFilterRemaining)))
 }
+
+// TestMetricsExporterReportsTheFilterMessage replays the minute on 2026-11-13
+// at 10:46 when the panel started asking for a filter change: the day field of
+// the countdown had just reached zero, a full day before the countdown itself.
+func TestMetricsExporterReportsTheFilterMessage(t *testing.T) {
+	m, _ := newTestExporter(t)
+	frame := decodeHex(t, "0100851f 0000"+
+		"0900 41202020202020202020202020202020"+ // Aktuelle Meldung: Filter wechseln
+		"3e00 3b17000000") // 0 d 23:59 left
+	frame[4], frame[5] = crcOf(frame)
+
+	m.handlePackage(t.Context(), newPackage(frame, false))
+
+	assert.Equal(t, float64('A'), testutil.ToFloat64(m.mustCollector(t, RegMessage)))
+	assert.Equal(t, float64(23*3600+59*60), testutil.ToFloat64(m.mustCollector(t, RegFilterRemaining)))
+}
