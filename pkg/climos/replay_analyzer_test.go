@@ -46,7 +46,7 @@ func TestAnalyzerReportsWhatMoved(t *testing.T) {
 	assert.Equal(t, []byte{0x8b}, profiles[0x44].Last)
 }
 
-// TestAnalyzerTimesChangesByTheFilterCountdown covers the only clock the bus
+// TestAnalyzerTimesChangesByTheFilterCountdown covers the finest clock the bus
 // offers: a change is placed by how far the countdown has run down since the
 // start of the recording, not by when the file was read.
 func TestAnalyzerTimesChangesByTheFilterCountdown(t *testing.T) {
@@ -64,6 +64,43 @@ func TestAnalyzerTimesChangesByTheFilterCountdown(t *testing.T) {
 		"half an hour of the countdown had run down when 0x44 moved")
 	assert.Equal(t, []byte{0x8a}, changes[0].From)
 	assert.Equal(t, []byte{0x8b}, changes[0].To)
+}
+
+// TestAnalyzerCarriesTheClockOverAFilterReset replays the shape of 2026-11-14:
+// the countdown stood at zero until the reset loaded 150 days.
+// The operating time counter has to carry the clock through both, and the frame
+// it missed must not count twice once the countdown ticks again.
+func TestAnalyzerCarriesTheClockOverAFilterReset(t *testing.T) {
+	stream := concat(
+		dataFrame(t, filterRemaining(0, 0, 1), operatingTime(0, 10, 0)),
+		dataFrame(t, filterRemaining(0, 0, 0), operatingTime(0, 10, 1)),
+		dataFrame(t, filterRemaining(0, 0, 0), operatingTime(0, 10, 31)),
+		dataFrame(t, filterRemaining(150, 0, 0), register44(0x8a)),
+		dataFrame(t, filterRemaining(149, 23, 59)),
+		dataFrame(t, filterRemaining(149, 23, 58), operatingTime(0, 10, 33), register44(0x8b)),
+	)
+
+	analyzer := NewAnalyzer()
+	Replay(stream, analyzer.Add)
+
+	changes := changesOf(analyzer, 0x44)
+	require.Len(t, changes, 1)
+	assert.Equal(t, 33*time.Minute, changes[0].Elapsed)
+}
+
+func TestAnalyzerIgnoresACounterThatJumps(t *testing.T) {
+	stream := concat(
+		dataFrame(t, filterRemaining(60, 0, 0), register44(0x8a)),
+		dataFrame(t, filterRemaining(30, 0, 0)),
+		dataFrame(t, filterRemaining(29, 23, 59), register44(0x8b)),
+	)
+
+	analyzer := NewAnalyzer()
+	Replay(stream, analyzer.Add)
+
+	changes := changesOf(analyzer, 0x44)
+	require.Len(t, changes, 1)
+	assert.Equal(t, time.Minute, changes[0].Elapsed, "thirty days in one frame is a misread, not running time")
 }
 
 func TestAnalyzerCountsChangesPerRegister(t *testing.T) {
@@ -87,6 +124,10 @@ func register44(value byte) []byte {
 // the clock a replay places its changes on.
 func filterRemaining(days, hours, minutes uint8) []byte {
 	return []byte{0x3e, 0x00, minutes, hours, days, 0, 0}
+}
+
+func operatingTime(days, hours, minutes uint8) []byte {
+	return []byte{0x26, 0x00, minutes, hours, days, 0, 0}
 }
 
 func changesOf(analyzer *Analyzer, register Register) []RegisterChange {

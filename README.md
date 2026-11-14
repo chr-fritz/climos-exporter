@@ -185,8 +185,8 @@ climos-exporter replay dumps/2026-07-20.bin --changes
 
 `--changes` lists the individual value changes in order, dropping the registers
 that move constantly, so an operating mode selected on the panel stands out from
-the temperatures. Times come from the filter countdown, the only monotone clock
-on the bus; `--start 02:00` puts a wall clock next to it.
+the temperatures. Times come from the filter countdown and the operating time
+counter; `--start 02:00` (01:00 in winter) puts a wall clock next to it.
 
 ```sh
 climos-exporter replay dumps/after.bin --against dumps/before.bin

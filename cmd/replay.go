@@ -72,9 +72,10 @@ a recording holds the complete configuration only if it spans a restart.
 Comparing two such recordings is what identifies which register carries which
 setting.
 
-Times are counted from the filter countdown, the only monotone clock on the bus.
-It advances one minute per running minute and stands still while the unit is
-off, so it measures running time rather than wall clock time.`,
+Times are counted from the filter countdown, and from the operating time counter
+where the countdown stands at zero or is reset. Both advance one minute per
+running minute and stand still while the unit is off, so they measure running
+time rather than wall clock time.`,
 		Args: cobra.ExactArgs(1),
 		RunE: options.run,
 	}

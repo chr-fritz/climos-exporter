@@ -194,37 +194,54 @@ func (a *Analyzer) ChangeCounts() map[Register]int {
 }
 
 // replayClock recovers a timeline from the recording itself. The stream carries
-// no timestamp, but the filter countdown ticks down once per running minute,
-// which is the only monotone clock on the bus.
+// no timestamp. The filter countdown ticks down once per running minute and is
+// the finest clock there is, but it stands at zero while the change is overdue
+// and jumps back up when the filter is reset; the operating time counter runs
+// through both, yet misses a frame every few minutes. Each fills the other's gaps.
 type replayClock struct {
-	first   time.Duration
-	current time.Duration
-	started bool
+	now       time.Duration
+	filter    clockSource
+	operating clockSource
 }
 
 func (c *replayClock) observe(value RegisterValue) {
-	if value.Register != RegFilterRemaining {
-		return
+	switch value.Register {
+	case RegFilterRemaining:
+		c.now += c.filter.catchUp(-value.Duration(), c.now)
+	case RegOperatingTime:
+		c.now += c.operating.catchUp(value.Duration(), c.now)
 	}
-	remaining := value.Duration()
-	if remaining == 0 {
-		return
-	}
-	if !c.started {
-		c.first = remaining
-		c.started = true
-	}
-	c.current = remaining
 }
 
 // elapsed is how long the unit has been running since the start of the
 // recording. It stands still while the unit is off, which is the honest answer:
-// the countdown is the only time base there is.
+// the counters are the only time base there is.
 func (c *replayClock) elapsed() time.Duration {
-	if !c.started {
-		return 0
+	return c.now
+}
+
+// maxClockStep separates running time from a misread frame. Frames carrying the
+// counters arrive every minute or two, so a counter that moves further than this
+// between two of them has not measured anything.
+const maxClockStep = time.Hour
+
+// clockSource is one counter the clock follows, read so that it grows with
+// running time. It knows how far it advanced since its own last frame, and the
+// clock takes only the part the other counter has not already accounted for.
+type clockSource struct {
+	reading time.Duration
+	seenAt  time.Duration
+	seen    bool
+}
+
+func (s *clockSource) catchUp(reading, now time.Duration) time.Duration {
+	var gain time.Duration
+	advance := reading - s.reading
+	if counted := now - s.seenAt; s.seen && advance > counted && advance <= maxClockStep {
+		gain = advance - counted
 	}
-	return c.first - c.current
+	s.reading, s.seenAt, s.seen = reading, now+gain, true
+	return gain
 }
 
 func cloneRaw(raw []byte) []byte {
