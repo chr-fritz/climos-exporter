@@ -479,7 +479,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "Register 0x3e, zählt je Laufminute herunter.",
+      "description": "Register 0x3e, zählt je Laufminute herunter und bleibt bei 0 stehen, bis der Filter zurückgesetzt wird. Das Panel zeigt nur ganze Tage und meldet den Wechsel schon, sobald weniger als ein Tag übrig ist.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1583,7 +1583,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "Register 0x3e und 0x3d. Das Intervall steht nur im Registerabzug nach einem Neustart, davor meldet es NaN.",
+      "description": "Register 0x3e und 0x3d. Das Intervall kommt nur im Registerabzug nach einem Neustart und beim Filter-Reset über den Bus; der Reset setzt Restlaufzeit und Intervall auf denselben Wert.",
       "fieldConfig": {
         "defaults": {
           "color": {
