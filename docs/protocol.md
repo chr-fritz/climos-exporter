@@ -285,13 +285,15 @@ Value types:
 | `0x29` |     1 | operating mode to fall back to    | event | 5, 6             | measured   |
 | `0x44` |     1 | unidentified, 136 – 141          | 3.5 s  | see below        | open       |
 | `0x25` |     1 | constant 0x36                    | 60 s   | 54               | open       |
-| `0x09` |    16 | panel message, see below         | 60 s   | `00`, `41` + 15 spaces | inferred |
+| `0x09` |    16 | panel message, see below         | 60 s   | `00`, `41` + 15 spaces | measured |
 
-`0x09` went from `00` to `41` (`A`) on 2026-11-13 at 10:46, in the same minute
+`0x09` went from `00` to `41` (`A`) on 2026-11-13 at 09:47, in the same minute
 the day field of the filter countdown reached zero, and the panel's
-Aktuelle Meldung screen read *Filter wechseln* an hour later. The fifteen bytes
-behind it stayed spaces. Whether `41` is a character or a bit field, and which
-other messages it carries, takes a second message to tell.
+Aktuelle Meldung screen read *Filter wechseln* two hours later. It stayed `41`
+while the countdown stood at zero and went back to `00` on 2026-11-14 at 12:56,
+in the minute the filter runtime was reset. The fifteen bytes behind it stayed
+spaces. Whether `41` is a character or a bit field, and which other messages it
+carries, takes a second message to tell.
 
 `0x27`, `0x28` and `0x29` carry the mode codes from the `Lüfterstufen` sheet:
 1 – 3 fan stage, 4 boost, 5 away, 6 automatic. `0x27` and `0x28` move together
@@ -353,9 +355,16 @@ accumulated downtime.
 
 The panel drops the hours of the countdown: it shows the day field only, and it
 asks for the filter change as soon as that field is zero — on 2026-11-13 at
-10:46, with 23:59 still left in `0x3e` and `0x09` raising the message.
+09:47, with 23:59 still left in `0x3e` and `0x09` raising the message.
 `climos_filter_remaining_seconds` therefore reaches zero about a day after the
-panel's request. What `0x3e` does once it runs out is open.
+panel's request.
+
+At zero `0x3e` stops: on 2026-11-14 it reached `0000000000` at 09:47 and held
+it, still sent every minute, until the reset at 12:56. It neither wraps nor
+counts the overrun. The reset screen takes the remaining time as its input, and
+the 150 days entered there arrived in one frame as both `0x3e` and `0x3d`, so
+the reset sets the interval too. `0x28` and `0x29` followed within a second,
+re-sending the unchanged mode, and `0x09` cleared 25 seconds later.
 
 ### Identity, only during the startup scan
 
@@ -420,9 +429,11 @@ something else. The manual's constraint of 20 % < LS1 does not hold in this
 firmware, which accepts and displays 18 %.
 
 The filter interval is settable from 30 to 180 days in steps of ten, which the
-160 days in `0x3d` fits. The panel also counts how far the interval has been
-exceeded, and that counter has no register here yet — `0x3f`, which holds
-11 days and appears only in the restart dump, is the obvious candidate.
+160 and later 150 days in `0x3d` fit. The panel also counts how far the interval
+has been exceeded, and that counter has no register here yet. `0x3e` does not do
+it, since it holds zero while overdue. `0x3f`, which holds 11 days and appears
+only in the restart dump, is the obvious candidate, but it did not reach the bus
+during the three overdue hours on 2026-11-14 or at the reset.
 
 `0x4d` – `0x50` give the characteristic of the analog input:
 `n% = 17 + (U − 1.7) · (100 − 17) / (10 − 1.7)`, and because `83 / 8.3 = 10`
@@ -813,9 +824,10 @@ followed by the complete register dump. Two kinds occur:
   beforehand, there is no shutdown sequence, `0x55` reads 80 in the restart
   dump, and two complete address scans follow seven seconds apart.
 
-Each recording runs from 01:59 to 01:59 and they join without a gap. Since the
-stream carries no timestamp, a recording is dated through `0x3e`: that counter
-ticks down once per running minute.
+Each recording runs from midnight to midnight UTC, which is 02:00 local time in
+summer and 01:00 in winter, and they join without a gap. Since the stream carries
+no timestamp, a recording is dated through `0x3e`, which ticks down once per
+running minute, and through `0x26` where `0x3e` stands at zero or is reset.
 
 ## What the manufacturer documents
 
@@ -895,9 +907,10 @@ to the wrong sensor.
 - **What `0x08` marks.** Beyond a start and a controlled shutdown it fires on
   its own a few times a day, and neither the operating mode nor the fan setpoint
   moves with it.
-- **The filter countdown at zero.** Whether `0x3e` stops at zero or `0x3f`
-  starts counting the overrun, and whether `0x09` returns to `00` when the
-  filter runtime is reset, waits for the days after 2026-11-13.
+- **The filter overrun counter.** The panel counts how far the interval has
+  been exceeded, but no register moved while the filter was overdue on
+  2026-11-14. `0x3f` reaches the bus only in the restart dump, so a restart
+  during an overdue phase is what would show whether it is that counter.
 - **`0x3a`** = 100. It was read as the filter interval until the panel showed
   that interval to be 160 days, which is `0x3d`. What `0x3a` counts is open. The
   panel keeps one counter this document has no register for — how far the filter

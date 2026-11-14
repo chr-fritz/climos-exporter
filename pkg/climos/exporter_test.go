@@ -211,7 +211,7 @@ func TestMetricsExporterMatchesThePanel(t *testing.T) {
 }
 
 // TestMetricsExporterReportsTheFilterMessage replays the minute on 2026-11-13
-// at 10:46 when the panel started asking for a filter change: the day field of
+// at 09:47 when the panel started asking for a filter change: the day field of
 // the countdown had just reached zero, a full day before the countdown itself.
 func TestMetricsExporterReportsTheFilterMessage(t *testing.T) {
 	m, _ := newTestExporter(t)
